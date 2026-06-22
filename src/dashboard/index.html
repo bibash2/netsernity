@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>NetSentry // Operator Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+<div class="scanline"></div>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark">▚▚</span>
+    <span class="brand-name">NET<span class="accent">SENTRY</span></span>
+    <span class="brand-tag">/ OPERATOR CONSOLE v1.0</span>
+  </div>
+  <div class="status-cluster">
+    <div class="status-pill" id="status-pill">
+      <span class="dot"></span>
+      <span id="status-text">connecting…</span>
+    </div>
+    <div class="clock" id="clock">--:--:--</div>
+  </div>
+</header>
+
+<main class="grid">
+  <!-- Telemetry strip -->
+  <section class="panel telemetry">
+    <div class="panel-head">
+      <h2>TELEMETRY</h2>
+      <span class="panel-sub">live inference stats</span>
+    </div>
+    <div class="stat-row">
+      <div class="stat">
+        <span class="stat-label">predictions</span>
+        <span class="stat-value" id="stat-preds">0</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">attacks</span>
+        <span class="stat-value danger" id="stat-attacks">0</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">attack rate</span>
+        <span class="stat-value" id="stat-rate">0.00%</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">p50</span>
+        <span class="stat-value" id="stat-p50">— ms</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">p95</span>
+        <span class="stat-value" id="stat-p95">— ms</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">p99</span>
+        <span class="stat-value" id="stat-p99">— ms</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Attack type distribution -->
+  <section class="panel distribution">
+    <div class="panel-head">
+      <h2>THREAT DISTRIBUTION</h2>
+      <span class="panel-sub">alerts by type</span>
+    </div>
+    <div id="distribution-chart" class="dist-chart"></div>
+  </section>
+
+  <!-- Severity breakdown -->
+  <section class="panel severity">
+    <div class="panel-head">
+      <h2>SEVERITY</h2>
+      <span class="panel-sub">active alerts</span>
+    </div>
+    <div id="severity-blocks" class="severity-blocks">
+      <div class="sev-block" data-sev="critical"><span class="sev-label">CRITICAL</span><span class="sev-count">0</span></div>
+      <div class="sev-block" data-sev="high"><span class="sev-label">HIGH</span><span class="sev-count">0</span></div>
+      <div class="sev-block" data-sev="medium"><span class="sev-label">MEDIUM</span><span class="sev-count">0</span></div>
+      <div class="sev-block" data-sev="low"><span class="sev-label">LOW</span><span class="sev-count">0</span></div>
+    </div>
+  </section>
+
+  <!-- Probe console -->
+  <section class="panel probe">
+    <div class="panel-head">
+      <h2>MANUAL PROBE</h2>
+      <span class="panel-sub">submit flow for classification</span>
+    </div>
+    <div class="probe-controls">
+      <label>
+        preset profile
+        <select id="probe-preset">
+          <option value="benign">BENIGN browsing</option>
+          <option value="ddos">DDoS flood</option>
+          <option value="portscan">PortScan</option>
+          <option value="bruteforce">BruteForce login</option>
+          <option value="botnet">Botnet beacon</option>
+          <option value="infiltration">Infiltration</option>
+          <option value="webattack">WebAttack</option>
+        </select>
+      </label>
+      <label>
+        source IP
+        <input id="probe-source" type="text" placeholder="10.0.0.42" value="10.0.0.42" />
+      </label>
+      <button id="probe-fire" class="fire-btn">► FIRE PROBE</button>
+    </div>
+    <div class="probe-output" id="probe-output">
+      <div class="muted">// awaiting probe…</div>
+    </div>
+  </section>
+
+  <!-- Alert stream -->
+  <section class="panel alerts">
+    <div class="panel-head">
+      <h2>ALERT STREAM</h2>
+      <span class="panel-sub"><span id="alert-count">0</span> alerts</span>
+    </div>
+    <div id="alert-filter-bar" class="filter-bar">
+      <button class="filter active" data-sev="all">all</button>
+      <button class="filter" data-sev="critical">critical</button>
+      <button class="filter" data-sev="high">high</button>
+      <button class="filter" data-sev="medium">medium</button>
+      <button class="filter" data-sev="low">low</button>
+    </div>
+    <div id="alert-list" class="alert-list">
+      <div class="muted center">// no alerts yet</div>
+    </div>
+  </section>
+</main>
+
+<footer class="footbar">
+  <span>NetSentry — built from scratch · NumPy models · production-grade infrastructure</span>
+  <span><a href="/docs">api docs</a> · <a href="/api/v1/metrics">metrics</a> · <a href="/api/v1/health">health</a></span>
+</footer>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

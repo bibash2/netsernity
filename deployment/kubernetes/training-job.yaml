@@ -1,0 +1,123 @@
+# One-off training job. Run once to populate netsentry-models PVC.
+# The API Deployment waits for the models to exist before its readiness probe passes.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: netsentry-trainer
+  namespace: netsentry
+spec:
+  backoffLimit: 2
+  ttlSecondsAfterFinished: 86400
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: trainer
+          image: netsentry:1.0.0
+          imagePullPolicy: IfNotPresent
+          command: ["python", "-m", "scripts.train_pipeline"]
+          args: ["--config", "/app/config/config.yaml"]
+          env:
+            - name: NETSENTRY_DATA__N_SAMPLES
+              value: "50000"
+          resources:
+            requests:
+              cpu: "1"
+              memory: "2Gi"
+            limits:
+              cpu: "4"
+              memory: "4Gi"
+          volumeMounts:
+            - name: config
+              mountPath: /app/config
+            - name: models
+              mountPath: /app/models_artifacts
+            - name: data
+              mountPath: /app/data
+      volumes:
+        - name: config
+          configMap:
+            name: netsentry-config
+            items:
+              - key: config.yaml
+                path: config.yaml
+        - name: models
+          persistentVolumeClaim:
+            claimName: netsentry-models
+        - name: data
+          persistentVolumeClaim:
+            claimName: netsentry-data
+---
+# Weekly retrain — keeps models fresh against concept drift.
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: netsentry-retrain
+  namespace: netsentry
+spec:
+  schedule: "0 2 * * 0"          # Sunday 02:00 UTC
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          restartPolicy: OnFailure
+          containers:
+            - name: trainer
+              image: netsentry:1.0.0
+              command: ["python", "-m", "scripts.train_pipeline"]
+              args: ["--config", "/app/config/config.yaml"]
+              resources:
+                requests:
+                  cpu: "1"
+                  memory: "2Gi"
+                limits:
+                  cpu: "4"
+                  memory: "4Gi"
+              volumeMounts:
+                - name: config
+                  mountPath: /app/config
+                - name: models
+                  mountPath: /app/models_artifacts
+                - name: data
+                  mountPath: /app/data
+          volumes:
+            - name: config
+              configMap:
+                name: netsentry-config
+                items:
+                  - key: config.yaml
+                    path: config.yaml
+            - name: models
+              persistentVolumeClaim:
+                claimName: netsentry-models
+            - name: data
+              persistentVolumeClaim:
+                claimName: netsentry-data
+---
+# Ingress for public HTTP access
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: netsentry-ingress
+  namespace: netsentry
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+    nginx.ingress.kubernetes.io/proxy-body-size: "1m"
+    nginx.ingress.kubernetes.io/limit-rps: "50"
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: netsentry.local            # change to your real hostname
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: netsentry-api
+                port:
+                  number: 80

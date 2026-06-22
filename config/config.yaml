@@ -1,0 +1,75 @@
+# NetSentry main configuration
+# Any field here can be overridden via environment variables of the form
+# NETSENTRY_<SECTION>__<KEY>, e.g. NETSENTRY_API__PORT=9000
+
+data:
+  n_samples: 50000
+  test_size: 0.20
+  val_size: 0.10
+  random_state: 42
+  dataset_path: data/netsentry_dataset.csv
+
+model:
+  # Random Forest
+  rf_n_estimators: 60
+  rf_max_depth: 16
+  rf_min_samples_leaf: 4
+  rf_n_jobs: 1            # set >1 to parallelise trees across processes
+
+  # MLP
+  mlp_hidden_layers: [128, 64]
+  mlp_epochs: 30
+  mlp_learning_rate: 0.001
+  mlp_batch_size: 256
+  mlp_dropout: 0.25
+  mlp_l2_reg: 0.0001
+
+  # Isolation Forest
+  iso_n_estimators: 80
+  iso_subsample_size: 256
+  iso_contamination: 0.10
+
+  # Ensemble weights
+  ensemble_rf_weight: 0.55
+  ensemble_mlp_weight: 0.45
+  ensemble_anomaly_boost: 0.75
+
+api:
+  host: 0.0.0.0
+  port: 8000
+  workers: 1
+  api_key: ""             # empty disables key auth; set in prod via env var
+  rate_limit_per_minute: 240
+  enable_cors: true
+  cors_origins: ["*"]
+
+paths:
+  models_dir: models_artifacts
+  data_dir: data
+  logs_dir: logs
+  reports_dir: models_artifacts/reports
+
+logging:
+  level: INFO
+  format: json
+  file: logs/netsentry.log
+  rotate_bytes: 10485760
+  backups: 5
+
+# Real-time enforcement (IPS mode)
+# Set enabled: true and dry_run: false to activate real IP blocking.
+# Start with dry_run: true to validate policy before enforcing.
+enforcement:
+  enabled: false                      # must be explicitly enabled
+  dry_run: true                       # log what WOULD happen, don't execute
+  backend: log_only                   # nftables | log_only | noop
+  min_confidence_to_enforce: 0.90     # only enforce above this confidence
+  default_block_duration_seconds: 86400  # 24 hours
+  max_blocked_ips: 10000              # safety cap to prevent rule accumulation
+  nftables_table: netsentry           # isolated nftables table name
+  nftables_chain: blocked             # chain name within the table
+  allowlisted_cidrs:                  # never block these networks
+    - "10.0.0.0/8"
+    - "172.16.0.0/12"
+    - "192.168.0.0/16"
+    - "127.0.0.1/32"

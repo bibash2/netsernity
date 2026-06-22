@@ -1,0 +1,28 @@
+# Don't ship development clutter into the image
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.venv/
+venv/
+.git/
+.github/
+tests/
+docs/
+*.md
+!README.md
+
+# Locally generated artifacts — containers train their own
+data/
+models_artifacts/
+logs/
+*.log
+*.pkl
+*.npz
+*.csv
+
+# OS / IDE
+.DS_Store
+.idea/
+.vscode/

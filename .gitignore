@@ -1,0 +1,50 @@
+# Byte-compiled / optimised Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Packaging
+*.egg-info/
+*.egg
+dist/
+build/
+pip-wheel-metadata/
+
+# Environments
+.venv/
+venv/
+env/
+.env
+.env.local
+*.sqlite3
+
+# Test / coverage
+.pytest_cache/
+.coverage
+.coverage.*
+htmlcov/
+.tox/
+.mypy_cache/
+.ruff_cache/
+
+# IDEs / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# NetSentry runtime artifacts — never committed
+data/*.csv
+data/*.npz
+models_artifacts/*.pkl
+models_artifacts/*.npz
+models_artifacts/reports/*.json
+logs/*.log
+logs/*.jsonl
+!logs/.gitkeep
+!data/.gitkeep
+!models_artifacts/.gitkeep
+
+# Node (if frontend tooling is ever added)
+node_modules/

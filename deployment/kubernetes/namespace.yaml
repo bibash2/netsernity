@@ -1,0 +1,69 @@
+# Namespace
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: netsentry
+  labels:
+    app: netsentry
+---
+# Application config (non-secret)
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: netsentry-config
+  namespace: netsentry
+data:
+  config.yaml: |
+    data:
+      n_samples: 50000
+      test_size: 0.20
+      val_size: 0.10
+      random_state: 42
+      dataset_path: /app/data/netsentry_dataset.csv
+
+    model:
+      rf_n_estimators: 100
+      rf_max_depth: 18
+      mlp_hidden_layers: [128, 64]
+      mlp_epochs: 40
+
+    api:
+      host: 0.0.0.0
+      port: 8000
+      rate_limit_per_minute: 600
+      enable_cors: true
+      cors_origins: ["*"]
+
+    paths:
+      models_dir: /app/models_artifacts
+      data_dir: /app/data
+      logs_dir: /app/logs
+      reports_dir: /app/models_artifacts/reports
+
+    logging:
+      level: INFO
+      format: json
+      file: /app/logs/netsentry.log
+---
+# Persistent volumes for trained artifacts and dataset
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: netsentry-models
+  namespace: netsentry
+spec:
+  accessModes: ["ReadWriteMany"]
+  resources:
+    requests:
+      storage: 5Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: netsentry-data
+  namespace: netsentry
+spec:
+  accessModes: ["ReadWriteOnce"]
+  resources:
+    requests:
+      storage: 10Gi

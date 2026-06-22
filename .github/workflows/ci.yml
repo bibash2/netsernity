@@ -1,0 +1,97 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ─────────────────────────────────────────────────────────
+  lint-and-test:
+    name: Lint & unit tests
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install ruff
+
+      - name: Lint (ruff)
+        run: ruff check src/ scripts/ tests/ --output-format=github
+        continue-on-error: true  # warn but don't fail — lint isn't configured yet
+
+      - name: Run unit tests
+        run: python -m pytest tests/test_models.py tests/test_data_and_metrics.py -v
+
+  # ─────────────────────────────────────────────────────────
+  train-and-integration:
+    name: Train + API integration test
+    runs-on: ubuntu-latest
+    needs: lint-and-test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Train (small dataset to keep CI fast)
+        run: python -m scripts.train_pipeline --samples 3000 --quiet
+
+      - name: Integration tests against trained artifacts
+        run: python -m pytest tests/test_api.py -v
+
+      - name: Upload metrics report
+        uses: actions/upload-artifact@v4
+        with:
+          name: training-metrics
+          path: models_artifacts/reports/training_metrics.json
+
+  # ─────────────────────────────────────────────────────────
+  docker-build:
+    name: Build Docker image
+    runs-on: ubuntu-latest
+    needs: train-and-integration
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: docker/Dockerfile
+          push: false
+          tags: netsentry:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke-test built image
+        run: |
+          docker run --rm netsentry:${{ github.sha }} \
+              python -c "import src.models; import src.api; print('ok')"

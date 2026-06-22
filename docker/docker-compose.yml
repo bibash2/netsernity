@@ -1,0 +1,108 @@
+# Local development stack.
+#
+#   docker compose up -d                 → starts API + Prometheus + Grafana + Nginx
+#   docker compose run --rm trainer      → one-shot training job
+#   docker compose logs -f api           → tail API logs
+#   docker compose down -v               → teardown including volumes
+
+version: "3.9"
+
+services:
+  # ────────────────────────────────────────────────
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: netsentry:latest
+    container_name: netsentry-api
+    restart: unless-stopped
+    environment:
+      NETSENTRY_API__HOST: 0.0.0.0
+      NETSENTRY_API__PORT: "8000"
+      NETSENTRY_LOGGING__LEVEL: INFO
+      NETSENTRY_API__API_KEY: ${NETSENTRY_API_KEY:-}
+    volumes:
+      - models:/app/models_artifacts
+      - logs:/app/logs
+      - data:/app/data
+    ports:
+      - "8000:8000"
+    networks: [netsentry]
+    depends_on:
+      trainer:
+        condition: service_completed_successfully
+
+  # One-shot training container. `condition: service_completed_successfully`
+  # above ensures the API only starts after models have been trained.
+  trainer:
+    image: netsentry:latest
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    container_name: netsentry-trainer
+    command: ["python", "-m", "scripts.train_pipeline", "--config", "config/config.yaml", "--quiet"]
+    environment:
+      NETSENTRY_DATA__N_SAMPLES: "${N_SAMPLES:-20000}"
+    volumes:
+      - models:/app/models_artifacts
+      - data:/app/data
+      - logs:/app/logs
+    networks: [netsentry]
+
+  # ────────────────────────────────────────────────
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: netsentry-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ../deployment/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - api
+    networks: [netsentry]
+
+  # ────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.54.1
+    container_name: netsentry-prometheus
+    restart: unless-stopped
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prom_data:/prometheus
+    ports:
+      - "9090:9090"
+    networks: [netsentry]
+    depends_on:
+      - api
+
+  grafana:
+    image: grafana/grafana:11.2.0
+    container_name: netsentry-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana_data:/var/lib/grafana
+    networks: [netsentry]
+    depends_on:
+      - prometheus
+
+volumes:
+  models:
+  data:
+  logs:
+  prom_data:
+  grafana_data:
+
+networks:
+  netsentry:
+    driver: bridge
