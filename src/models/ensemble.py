@@ -110,17 +110,22 @@ class EnsembleNIDS(BaseModel):
         proba = self.predict_proba(X)
         base_pred = np.argmax(proba, axis=1)
 
-        # Anomaly override: if IF flags the sample strongly and the supervised
-        # models said "benign", re-route to the most likely attack class.
+        # Anomaly override: IF must flag strongly AND the supervised models
+        # must have non-trivial attack probability. Without the second check,
+        # normal traffic that looks slightly unusual gets misclassified.
         anomaly_scores = self.iso.anomaly_score(X)
         for i in range(X.shape[0]):
             if base_pred[i] == self.benign_class and anomaly_scores[i] >= self.anomaly_boost:
-                # Pick the highest-probability non-benign class
                 non_benign = np.arange(proba.shape[1]) != self.benign_class
                 if non_benign.any():
-                    idx_pool = np.where(non_benign)[0]
-                    best = idx_pool[np.argmax(proba[i, non_benign])]
-                    base_pred[i] = best
+                    attack_prob = proba[i, non_benign].max()
+                    # ponytail: only override if supervised models give >=15%
+                    # attack probability — prevents IF from overriding high-confidence
+                    # benign predictions. Raise threshold if FP still too high.
+                    if attack_prob >= 0.15:
+                        idx_pool = np.where(non_benign)[0]
+                        best = idx_pool[np.argmax(proba[i, non_benign])]
+                        base_pred[i] = best
 
         return base_pred.astype(np.int64)
 

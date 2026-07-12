@@ -8,6 +8,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import PlainTextResponse
 
+from ..capture import PacketSniffer
 from ..enforcement import ResponseExecutor
 from ..inference import AlertManager, InferenceEngine
 from ..monitoring.metrics import REGISTRY
@@ -33,6 +34,7 @@ def build_router(
     alerts: AlertManager,
     response_executor: ResponseExecutor,
     version: str,
+    sniffer: PacketSniffer = None,
 ) -> APIRouter:
     router = APIRouter()
 
@@ -187,5 +189,32 @@ def build_router(
     def flush_all_blocks() -> dict:
         count = response_executor.flush_all()
         return {"flushed": True, "count": count}
+
+    # -------------------------------------------------------------- Live Capture
+    @router.get("/capture/status", tags=["Live Capture"])
+    def capture_status() -> dict:
+        if sniffer is None:
+            return {"available": False, "reason": "Sniffer not initialized"}
+        return sniffer.stats()
+
+    @router.post("/capture/start", tags=["Live Capture"])
+    def capture_start(interface: Optional[str] = Query(None)) -> dict:
+        if sniffer is None:
+            raise HTTPException(400, "Sniffer not initialized")
+        if not sniffer.available:
+            raise HTTPException(400, "scapy not installed — run: pip install scapy")
+        if interface:
+            sniffer._interface = interface
+        ok = sniffer.start()
+        if not ok:
+            raise HTTPException(500, "Failed to start capture")
+        return {"started": True, "interface": sniffer._interface or "default"}
+
+    @router.post("/capture/stop", tags=["Live Capture"])
+    def capture_stop() -> dict:
+        if sniffer is None:
+            raise HTTPException(400, "Sniffer not initialized")
+        sniffer.stop()
+        return {"stopped": True}
 
     return router

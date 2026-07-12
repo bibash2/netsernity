@@ -27,18 +27,50 @@ pytestmark = pytest.mark.skipif(
     reason="Model artifacts missing — run training first.",
 )
 
-from src.data.generator import CLASS_NAMES, _sample_flow
+from src.data.generator import CLASS_NAMES, CLASS_TO_ID, FEATURE_NAMES, _sample_flow
+from src.data.loader import load_or_generate
 from src.enforcement.policy import RESPONSE_POLICY, ActionType
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────
 
+# Load real dataset once for the module
+_DATASET_PATH = ROOT / "data" / "netsentry_dataset.csv"
+_REAL_X, _REAL_Y = None, None
+
+
+def _ensure_dataset():
+    global _REAL_X, _REAL_Y
+    if _REAL_X is None:
+        from src.data.generator import load_dataset_csv
+        _REAL_X, _REAL_Y = load_dataset_csv(_DATASET_PATH)
+
 
 def _generate_flows_for_class(attack_type: str, count: int, base_seed: int) -> list[dict]:
+    """Sample real flows from the dataset for the given attack type."""
+    _ensure_dataset()
+    class_id = CLASS_TO_ID[attack_type]
+    mask = _REAL_Y == class_id
+    indices = np.where(mask)[0]
+    rng = np.random.default_rng(base_seed)
+
+    if len(indices) >= count:
+        chosen = rng.choice(indices, size=count, replace=False)
+    else:
+        # Fall back to synthetic if not enough real samples
+        chosen = rng.choice(indices, size=count, replace=True) if len(indices) > 0 else []
+
     flows = []
-    for i in range(count):
-        rng = np.random.default_rng(base_seed + i)
-        flows.append(_sample_flow(attack_type, rng))
+    for idx in chosen:
+        flow = {FEATURE_NAMES[j]: float(_REAL_X[idx][j]) for j in range(len(FEATURE_NAMES))}
+        flows.append(flow)
+
+    # If no real samples, fall back to synthetic generator
+    if not flows:
+        for i in range(count):
+            r = np.random.default_rng(base_seed + i)
+            flows.append(_sample_flow(attack_type, r))
+
     return flows
 
 

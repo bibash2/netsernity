@@ -171,19 +171,25 @@ class TrainingPipeline:
             preds = model.predict(X_te)
             latency_ms = (time.time() - t0) / max(1, len(y_te)) * 1000
             rpt = metrics.precision_recall_f1(y_te, preds)
-            accuracy = metrics.accuracy(y_te, preds)
+            acc = metrics.accuracy(y_te, preds)
+            fpr = metrics.false_positive_rate(y_te, preds)
+            fnr = metrics.false_negative_rate(y_te, preds)
+            dr = metrics.detection_rate(y_te, preds)
             report["models"][name] = {
-                "accuracy": accuracy,
+                "accuracy": acc,
                 "macro_f1": rpt["macro"]["f1"],
                 "weighted_f1": rpt["weighted"]["f1"],
+                "false_positive_rate": fpr,
+                "false_negative_rate": fnr,
+                "detection_rate": dr,
                 "per_class": rpt["per_class"],
                 "confusion_matrix": rpt["confusion_matrix"],
                 "avg_latency_ms_per_sample": round(latency_ms, 3),
                 "training_time_sec": round(getattr(model, "training_time_", 0.0), 2),
             }
             logger.info(
-                "%s | accuracy=%.4f macro_f1=%.4f weighted_f1=%.4f",
-                name, accuracy, rpt["macro"]["f1"], rpt["weighted"]["f1"],
+                "%s | accuracy=%.4f macro_f1=%.4f FPR=%.4f FNR=%.4f DR=%.4f",
+                name, acc, rpt["macro"]["f1"], fpr, fnr, dr,
             )
 
         # Isolation Forest: binary benign vs anomaly evaluation

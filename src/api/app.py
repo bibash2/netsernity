@@ -15,11 +15,15 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, Request
+import asyncio
+import json
+
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from ..capture import PacketSniffer
 from ..enforcement import ResponseExecutor
 from ..enforcement.allowlist import Allowlist
 from ..enforcement.backends.log_only import LogOnlyBackend
@@ -37,8 +41,12 @@ logger = get_logger(__name__)
 
 
 def create_app(config: Config) -> FastAPI:
+    _event_loop = None
+
     @asynccontextmanager
     async def lifespan(app: FastAPI):
+        nonlocal _event_loop
+        _event_loop = asyncio.get_running_loop()
         REGISTRY.set_gauge("netsentry_up", 1)
         logger.info("NetSentry API started, version=%s models=%s", VERSION, config.paths.models_dir)
         yield
@@ -103,9 +111,77 @@ def create_app(config: Config) -> FastAPI:
         on_alert=response_executor.enforce,
     )
 
+    # WebSocket hub — push events to all connected dashboards instantly
+    ws_clients: set[WebSocket] = set()
+
+    async def _ws_broadcast(event: dict):
+        dead = set()
+        msg = json.dumps(event)
+        for ws in ws_clients:
+            try:
+                await ws.send_text(msg)
+            except Exception:
+                dead.add(ws)
+        ws_clients.difference_update(dead)
+
+    def ws_broadcast_sync(event: dict):
+        """Thread-safe broadcast from the sniffer thread."""
+        if _event_loop is not None and _event_loop.is_running():
+            asyncio.run_coroutine_threadsafe(_ws_broadcast(event), _event_loop)
+
+    @app.websocket("/ws")
+    async def websocket_endpoint(ws: WebSocket):
+        await ws.accept()
+        ws_clients.add(ws)
+        try:
+            while True:
+                await ws.receive_text()  # keep alive
+        except WebSocketDisconnect:
+            ws_clients.discard(ws)
+
+    # Live packet capture — classify flows in-process
+    def on_captured_flow(features: dict, source_ip: str):
+        """Called by the sniffer for each completed flow."""
+        raw = engine.predict(features)
+        result = raw["results"]
+        alert = alerts.record(result, source_ip=source_ip)
+        alert_id = alert["alert_id"] if alert else None
+
+        sniffer.record_result(
+            features, source_ip,
+            prediction=result.get("prediction", "?"),
+            is_attack=result.get("is_attack", False),
+            confidence=result.get("confidence", 0),
+            alert_id=alert_id,
+        )
+
+        # Push to all connected dashboards instantly
+        ws_broadcast_sync({
+            "type": "flow",
+            "source_ip": source_ip,
+            "prediction": result.get("prediction", "?"),
+            "is_attack": result.get("is_attack", False),
+            "confidence": result.get("confidence", 0),
+            "anomaly_score": result.get("anomaly_score", 0),
+            "alert_id": alert_id,
+            "severity": alert.get("severity") if alert else None,
+        })
+
+    def on_raw_packet(src_ip: str, dst_ip: str, count: int):
+        """Called every N packets — pushes to dashboard for river animation."""
+        ws_broadcast_sync({
+            "type": "packets",
+            "src_ip": src_ip,
+            "dst_ip": dst_ip,
+            "count": count,
+        })
+
+    sniffer = PacketSniffer(on_flow=on_captured_flow, on_packet_cb=on_raw_packet)
+
     # Register routes under /api/v1
     api_router = build_router(
-        engine=engine, alerts=alerts, response_executor=response_executor, version=VERSION,
+        engine=engine, alerts=alerts, response_executor=response_executor,
+        version=VERSION, sniffer=sniffer,
     )
     app.include_router(api_router, prefix="/api/v1")
 

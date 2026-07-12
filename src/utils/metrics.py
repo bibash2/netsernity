@@ -116,6 +116,35 @@ def roc_auc_binary(y_true: np.ndarray, y_score: np.ndarray) -> float:
     return auc
 
 
+def false_positive_rate(y_true: np.ndarray, y_pred: np.ndarray, benign_class: int = 0) -> float:
+    """FPR: fraction of benign flows incorrectly classified as attack.
+    This is the metric that matters most for NIDS — high FPR = alert fatigue."""
+    y_true = np.asarray(y_true, dtype=np.int64)
+    y_pred = np.asarray(y_pred, dtype=np.int64)
+    benign_mask = y_true == benign_class
+    if benign_mask.sum() == 0:
+        return 0.0
+    false_positives = ((y_pred != benign_class) & benign_mask).sum()
+    return float(false_positives / benign_mask.sum())
+
+
+def false_negative_rate(y_true: np.ndarray, y_pred: np.ndarray, benign_class: int = 0) -> float:
+    """FNR: fraction of attack flows incorrectly classified as benign.
+    High FNR = attacks slipping through."""
+    y_true = np.asarray(y_true, dtype=np.int64)
+    y_pred = np.asarray(y_pred, dtype=np.int64)
+    attack_mask = y_true != benign_class
+    if attack_mask.sum() == 0:
+        return 0.0
+    false_negatives = ((y_pred == benign_class) & attack_mask).sum()
+    return float(false_negatives / attack_mask.sum())
+
+
+def detection_rate(y_true: np.ndarray, y_pred: np.ndarray, benign_class: int = 0) -> float:
+    """DR (True Positive Rate): fraction of attacks correctly detected."""
+    return 1.0 - false_negative_rate(y_true, y_pred, benign_class)
+
+
 def classification_report(y_true: np.ndarray, y_pred: np.ndarray, labels: Optional[list] = None) -> str:
     """Pretty printed metrics table."""
     report = precision_recall_f1(y_true, y_pred)

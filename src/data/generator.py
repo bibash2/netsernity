@@ -71,15 +71,17 @@ CLASS_NAMES: list[str] = [
 CLASS_TO_ID = {name: idx for idx, name in enumerate(CLASS_NAMES)}
 
 
-# Default class ratios — skewed to benign, matching real-world traffic priors.
+# Default class ratios — real-world traffic is overwhelmingly benign.
+# Previous ratio (60% benign) was too generous to attack classes, making
+# separation trivially easy and causing high FPR on real traffic.
 DEFAULT_CLASS_MIX: dict[str, float] = {
-    "BENIGN": 0.60,
-    "DDoS": 0.10,
-    "PortScan": 0.08,
-    "BruteForce": 0.07,
-    "Botnet": 0.06,
-    "Infiltration": 0.05,
-    "WebAttack": 0.04,
+    "BENIGN": 0.80,
+    "DDoS": 0.06,
+    "PortScan": 0.04,
+    "BruteForce": 0.03,
+    "Botnet": 0.03,
+    "Infiltration": 0.02,
+    "WebAttack": 0.02,
 }
 
 
@@ -98,24 +100,28 @@ class _FeatureRange:
 # Per-class feature distributions. These capture the statistical fingerprint
 # of each attack class as observed in real CIC-IDS-style datasets.
 PROFILES: dict[str, dict[str, _FeatureRange]] = {
+    # ponytail: BENIGN ranges widened to reflect real traffic diversity.
+    # Real benign traffic includes everything from DNS queries (tiny, fast)
+    # to file downloads (large, long). Narrow ranges caused model to flag
+    # any unusual-but-normal traffic as attack.
     "BENIGN": {
-        "flow_duration":       _FeatureRange(50_000, 200_000, log_scale=True),
-        "total_fwd_packets":   _FeatureRange(5, 50),
-        "total_bwd_packets":   _FeatureRange(5, 40),
-        "fwd_packet_length_mean": _FeatureRange(200, 800),
-        "bwd_packet_length_mean": _FeatureRange(100, 1200),
-        "flow_bytes_per_sec":  _FeatureRange(1_000, 50_000, log_scale=True),
-        "flow_packets_per_sec":_FeatureRange(10, 200),
-        "syn_flag_count":      _FeatureRange(0, 2),
-        "fin_flag_count":      _FeatureRange(0, 2),
-        "rst_flag_count":      _FeatureRange(0, 1),
-        "psh_flag_count":      _FeatureRange(0, 10),
-        "ack_flag_count":      _FeatureRange(1, 50),
+        "flow_duration":       _FeatureRange(1_000, 60_000_000, log_scale=True),
+        "total_fwd_packets":   _FeatureRange(1, 500),
+        "total_bwd_packets":   _FeatureRange(0, 400),
+        "fwd_packet_length_mean": _FeatureRange(40, 1460),
+        "bwd_packet_length_mean": _FeatureRange(0, 1460),
+        "flow_bytes_per_sec":  _FeatureRange(100, 1_000_000, log_scale=True),
+        "flow_packets_per_sec":_FeatureRange(1, 1_000, log_scale=True),
+        "syn_flag_count":      _FeatureRange(0, 3),
+        "fin_flag_count":      _FeatureRange(0, 3),
+        "rst_flag_count":      _FeatureRange(0, 2),
+        "psh_flag_count":      _FeatureRange(0, 50),
+        "ack_flag_count":      _FeatureRange(1, 500),
         "urg_flag_count":      _FeatureRange(0, 0),
-        "down_up_ratio":       _FeatureRange(0.3, 3.0),
-        "avg_packet_size":     _FeatureRange(150, 1000),
-        "init_win_bytes_fwd":  _FeatureRange(8_000, 65_535),
-        "init_win_bytes_bwd":  _FeatureRange(8_000, 65_535),
+        "down_up_ratio":       _FeatureRange(0.1, 5.0),
+        "avg_packet_size":     _FeatureRange(40, 1460),
+        "init_win_bytes_fwd":  _FeatureRange(1_024, 65_535),
+        "init_win_bytes_bwd":  _FeatureRange(0, 65_535),
     },
     "DDoS": {
         "flow_duration":       _FeatureRange(1_000, 30_000, log_scale=True),

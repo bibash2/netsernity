@@ -168,3 +168,50 @@ class TestEnsemble:
         assert (preds == y).mean() > 0.90
         detail = ens.predict_with_detail(X[:5])
         assert detail["ensemble_proba"].shape == (5, 3)
+
+    def test_high_anomaly_boost_reduces_false_positives(
+        self, toy_data: tuple[np.ndarray, np.ndarray]
+    ) -> None:
+        """High anomaly_boost (0.9) should produce fewer FPs than low (0.5)."""
+        X, y = toy_data
+        rf = RandomForestClassifier(n_estimators=8, max_depth=6, random_state=0).fit(X, y)
+        mlp = MLPClassifier(hidden_layers=(16, 8), epochs=20, dropout=0.0, random_state=0).fit(X, y)
+        iso = IsolationForest(n_estimators=30, subsample_size=128, random_state=0).fit(X[y == 0])
+
+        benign_samples = X[y == 0]
+
+        ens_aggressive = EnsembleNIDS(rf=rf, mlp=mlp, iso=iso, anomaly_boost=0.5)
+        ens_aggressive.is_fitted = True
+        ens_aggressive.n_features_ = X.shape[1]
+        ens_aggressive.classes_ = np.unique(y)
+        ens_aggressive.n_classes_ = 3
+
+        ens_conservative = EnsembleNIDS(rf=rf, mlp=mlp, iso=iso, anomaly_boost=0.9)
+        ens_conservative.is_fitted = True
+        ens_conservative.n_features_ = X.shape[1]
+        ens_conservative.classes_ = np.unique(y)
+        ens_conservative.n_classes_ = 3
+
+        fpr_aggressive = (ens_aggressive.predict(benign_samples) != 0).mean()
+        fpr_conservative = (ens_conservative.predict(benign_samples) != 0).mean()
+
+        assert fpr_conservative <= fpr_aggressive, (
+            f"Conservative FPR ({fpr_conservative:.2%}) should be <= "
+            f"aggressive FPR ({fpr_aggressive:.2%})"
+        )
+
+
+class TestMetrics:
+    def test_fpr_fnr_detection_rate(self) -> None:
+        from src.utils.metrics import false_positive_rate, false_negative_rate, detection_rate
+
+        y_true = np.array([0, 0, 0, 0, 1, 1, 2, 2])
+        y_pred = np.array([0, 0, 1, 0, 1, 0, 2, 2])  # 1 FP (benign→attack), 1 FN (attack→benign)
+
+        fpr = false_positive_rate(y_true, y_pred)
+        fnr = false_negative_rate(y_true, y_pred)
+        dr = detection_rate(y_true, y_pred)
+
+        assert abs(fpr - 0.25) < 1e-6     # 1 out of 4 benign misclassified
+        assert abs(fnr - 0.25) < 1e-6     # 1 out of 4 attacks missed
+        assert abs(dr - 0.75) < 1e-6      # 3 out of 4 attacks caught

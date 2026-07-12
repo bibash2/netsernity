@@ -72,9 +72,11 @@ def main() -> int:
     for name, m in report.get("models", {}).items():
         acc = m.get("accuracy", 0.0)
         f1 = m.get("macro_f1") or m.get("binary_f1") or 0.0
-        lat = m.get("avg_latency_ms_per_sample", 0.0)
+        fpr = m.get("false_positive_rate", 0.0)
+        dr = m.get("detection_rate", 0.0)
         t = m.get("training_time_sec", 0.0)
-        print(f"  {name:<20}  accuracy={acc:.4f}  f1={f1:.4f}  train={t:>6.1f}s  pred={lat:>6.3f} ms/sample")
+        lat = m.get("avg_latency_ms_per_sample", 0.0)
+        print(f"  {name:<20}  acc={acc:.4f}  f1={f1:.4f}  FPR={fpr:.4f}  DR={dr:.4f}  train={t:>6.1f}s")
     print(f"  {'total':<20}  {report.get('total_training_time_sec', 0):.1f}s")
     print()
     print(f"Artifacts saved to: {cfg.paths.models_dir}/")

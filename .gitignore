@@ -37,6 +37,9 @@ Thumbs.db
 # NetSentry runtime artifacts — never committed
 data/*.csv
 data/*.npz
+data/cic-ids2017/
+data/unsw-nb15/
+data/synthetic/
 models_artifacts/*.pkl
 models_artifacts/*.npz
 models_artifacts/reports/*.json

@@ -13,6 +13,7 @@ from .preprocessor import Preprocessor, PreprocessorArtifacts
 from .real_dataset import (
     load_cic_ids2017_csv,
     load_cic_ids2017_directory,
+    load_unsw_nb15_csv,
     load_real_dataset,
     balance_classes,
 )
@@ -27,6 +28,7 @@ __all__ = [
     "load_or_generate",
     "load_cic_ids2017_csv",
     "load_cic_ids2017_directory",
+    "load_unsw_nb15_csv",
     "load_real_dataset",
     "balance_classes",
     "Preprocessor",

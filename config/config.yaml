@@ -3,36 +3,37 @@
 # NETSENTRY_<SECTION>__<KEY>, e.g. NETSENTRY_API__PORT=9000
 
 data:
-  n_samples: 50000
+  n_samples: 200000
   test_size: 0.20
   val_size: 0.10
   random_state: 42
   dataset_path: data/netsentry_dataset.csv
 
 model:
-  # Random Forest
-  rf_n_estimators: 60
-  rf_max_depth: 16
-  rf_min_samples_leaf: 4
-  rf_n_jobs: 1            # set >1 to parallelise trees across processes
+  # Random Forest — more trees + deeper for real data complexity
+  rf_n_estimators: 150
+  rf_max_depth: 20
+  rf_min_samples_leaf: 2
+  rf_n_jobs: 1            # set >1 to parallelise (custom RF doesn't support -1)
 
-  # MLP
-  mlp_hidden_layers: [128, 64]
-  mlp_epochs: 30
+  # MLP — wider + longer training for real distributions
+  mlp_hidden_layers: [256, 128, 64]
+  mlp_epochs: 50
   mlp_learning_rate: 0.001
-  mlp_batch_size: 256
-  mlp_dropout: 0.25
+  mlp_batch_size: 512
+  mlp_dropout: 0.3
   mlp_l2_reg: 0.0001
 
-  # Isolation Forest
-  iso_n_estimators: 80
+  # Isolation Forest — lower contamination = fewer FP from anomaly override
+  iso_n_estimators: 150
   iso_subsample_size: 256
-  iso_contamination: 0.10
+  iso_contamination: 0.03
 
-  # Ensemble weights
-  ensemble_rf_weight: 0.55
-  ensemble_mlp_weight: 0.45
-  ensemble_anomaly_boost: 0.75
+  # Ensemble — higher anomaly_boost = IF needs stronger signal to override benign
+  # RF gets more weight since it's the strongest supervised model
+  ensemble_rf_weight: 0.60
+  ensemble_mlp_weight: 0.40
+  ensemble_anomaly_boost: 0.90
 
 api:
   host: 0.0.0.0
@@ -60,16 +61,13 @@ logging:
 # Set enabled: true and dry_run: false to activate real IP blocking.
 # Start with dry_run: true to validate policy before enforcing.
 enforcement:
-  enabled: false                      # must be explicitly enabled
-  dry_run: true                       # log what WOULD happen, don't execute
+  enabled: true                       # enforcement active
+  dry_run: false                      # execute enforcement actions
   backend: log_only                   # nftables | log_only | noop
-  min_confidence_to_enforce: 0.90     # only enforce above this confidence
+  min_confidence_to_enforce: 0.85     # only enforce above this confidence
   default_block_duration_seconds: 86400  # 24 hours
   max_blocked_ips: 10000              # safety cap to prevent rule accumulation
   nftables_table: netsentry           # isolated nftables table name
   nftables_chain: blocked             # chain name within the table
   allowlisted_cidrs:                  # never block these networks
-    - "10.0.0.0/8"
-    - "172.16.0.0/12"
-    - "192.168.0.0/16"
     - "127.0.0.1/32"

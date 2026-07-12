@@ -93,13 +93,14 @@ def main() -> None:
     print("TRAINING COMPLETE (Real Data)")
     print("=" * 70)
     for model_name, model_report in report["models"].items():
-        accuracy = model_report.get("accuracy", 0)
+        acc = model_report.get("accuracy", 0)
         f1 = model_report.get("macro_f1", model_report.get("binary_f1", 0))
+        fpr = model_report.get("false_positive_rate", 0)
+        dr = model_report.get("detection_rate", 0)
         train_time = model_report.get("training_time_sec", 0)
-        latency = model_report.get("avg_latency_ms_per_sample", 0)
         print(
-            f"  {model_name:22s} accuracy={accuracy:.4f}  f1={f1:.4f}"
-            f"  train={train_time:6.1f}s  pred={latency:.3f} ms/sample"
+            f"  {model_name:22s} acc={acc:.4f}  f1={f1:.4f}"
+            f"  FPR={fpr:.4f}  DR={dr:.4f}  train={train_time:6.1f}s"
         )
     print(f"  {'total':22s} {report['total_training_time_sec']:.1f}s")
     print(f"\nArtifacts saved to: {cfg.paths.models_dir}/")

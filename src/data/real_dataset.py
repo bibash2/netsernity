@@ -1,7 +1,7 @@
 """
-Real-world dataset loader for CIC-IDS2017 and CSE-CIC-IDS2018.
+Real-world dataset loader for CIC-IDS2017, CSE-CIC-IDS2018, and UNSW-NB15.
 
-Downloads, cleans, maps column names and labels, balances classes, and
+Loads, cleans, maps column names and labels, balances classes, and
 outputs (X, y, feature_names) compatible with the training pipeline.
 Supports blending real data with synthetic oversampling for rare classes.
 """
@@ -60,6 +60,38 @@ CIC_IDS2017_COLUMN_MAP: dict[str, str] = {
     # Alternate spellings seen in some CSV versions
     "fwd header length.1":                   "fwd_header_length",
     "total length of fwd packets":           "fwd_packet_length_mean",
+    # V2 format (underscores instead of spaces, as in Zenodo CIC-IDS-2017-V2.csv)
+    "flow_duration":                         "flow_duration",
+    "total_fwd_packets":                     "total_fwd_packets",
+    "total_backward_packets":                "total_bwd_packets",
+    "fwd_packet_length_mean":                "fwd_packet_length_mean",
+    "bwd_packet_length_mean":                "bwd_packet_length_mean",
+    "flow_bytes/s":                          "flow_bytes_per_sec",
+    "flow_packets/s":                        "flow_packets_per_sec",
+    "fwd_iat_mean":                          "fwd_iat_mean",
+    "bwd_iat_mean":                          "bwd_iat_mean",
+    "fwd_iat_std":                           "fwd_iat_std",
+    "packet_length_mean":                    "packet_length_mean",
+    "packet_length_std":                     "packet_length_std",
+    "packet_length_variance":                "packet_length_variance",
+    "fin_flag_count":                        "fin_flag_count",
+    "syn_flag_count":                        "syn_flag_count",
+    "rst_flag_count":                        "rst_flag_count",
+    "psh_flag_count":                        "psh_flag_count",
+    "ack_flag_count":                        "ack_flag_count",
+    "urg_flag_count":                        "urg_flag_count",
+    "down/up_ratio":                         "down_up_ratio",
+    "average_packet_size":                   "avg_packet_size",
+    "avg_fwd_segment_size":                  "fwd_segment_size_avg",
+    "avg_bwd_segment_size":                  "bwd_segment_size_avg",
+    "subflow_fwd_packets":                   "subflow_fwd_packets",
+    "subflow_bwd_packets":                   "subflow_bwd_packets",
+    "init_win_bytes_forward":                "init_win_bytes_fwd",
+    "init_win_bytes_backward":               "init_win_bytes_bwd",
+    "active_mean":                           "active_mean",
+    "idle_mean":                             "idle_mean",
+    "fwd_header_length":                     "fwd_header_length",
+    "fwd_header_length.1":                   "fwd_header_length",
 }
 
 
@@ -71,7 +103,6 @@ CIC_IDS2017_LABEL_MAP: dict[str, str] = {
 
     # DDoS
     "ddos":                         "DDoS",
-    "ddos":                         "DDoS",
 
     # DoS → mapped to DDoS (denial of service family)
     "dos hulk":                     "DDoS",
@@ -79,6 +110,9 @@ CIC_IDS2017_LABEL_MAP: dict[str, str] = {
     "dos slowloris":                "DDoS",
     "dos slowhttptest":             "DDoS",
     "heartbleed":                   "DDoS",
+
+    # V2 combined attack class
+    "comb":                         "DDoS",
 
     # PortScan
     "portscan":                     "PortScan",
@@ -93,14 +127,104 @@ CIC_IDS2017_LABEL_MAP: dict[str, str] = {
     # Infiltration
     "infiltration":                 "Infiltration",
 
-    # WebAttack
+    # WebAttack — various encoding variants across CSV versions
     "web attack – brute force":     "WebAttack",
     "web attack – xss":             "WebAttack",
     "web attack – sql injection":   "WebAttack",
     "web attack \x96 brute force":  "WebAttack",
     "web attack \x96 xss":         "WebAttack",
     "web attack \x96 sql injection": "WebAttack",
+    "web attack \ufffd brute force": "WebAttack",
+    "web attack \ufffd xss":       "WebAttack",
+    "web attack \ufffd sql injection": "WebAttack",
 }
+
+
+# ── UNSW-NB15 column and label mapping ──
+
+UNSW_NB15_COLUMN_MAP: dict[str, str] = {
+    "dur":           "flow_duration",
+    "spkts":         "total_fwd_packets",
+    "dpkts":         "total_bwd_packets",
+    "smean":         "fwd_packet_length_mean",
+    "dmean":         "bwd_packet_length_mean",
+    "sbytes":        "flow_bytes_per_sec",      # approximate: total src bytes
+    "sload":         "flow_packets_per_sec",     # approximate: src bits/sec
+    "sinpkt":        "fwd_iat_mean",
+    "dinpkt":        "bwd_iat_mean",
+    "sjit":          "fwd_iat_std",
+    "ct_dst_ltm":    "packet_length_mean",       # approx mapping
+    "ct_src_dport_ltm": "packet_length_std",     # approx mapping
+    "ct_dst_sport_ltm": "packet_length_variance", # approx mapping
+    "tcprtt":        "avg_packet_size",
+    "synack":        "syn_flag_count",
+    "ackdat":        "ack_flag_count",
+    "swin":          "init_win_bytes_fwd",
+    "dwin":          "init_win_bytes_bwd",
+}
+
+UNSW_NB15_LABEL_MAP: dict[str, str] = {
+    "normal":       "BENIGN",
+    "fuzzers":      "WebAttack",
+    "analysis":     "Infiltration",
+    "backdoors":    "Botnet",
+    "backdoor":     "Botnet",
+    "dos":          "DDoS",
+    "exploits":     "WebAttack",
+    "generic":      "DDoS",
+    "reconnaissance": "PortScan",
+    "shellcode":    "Infiltration",
+    "worms":        "Botnet",
+}
+
+
+def load_unsw_nb15_csv(csv_path: str | Path) -> tuple[np.ndarray, np.ndarray]:
+    """Load a single UNSW-NB15 CSV file and return (X, y) in NetSentry format."""
+    csv_path = Path(csv_path)
+    logger.info("Loading UNSW-NB15 CSV: %s", csv_path)
+
+    X_rows: list[list[float]] = []
+    y_labels: list[int] = []
+
+    with open(csv_path, "r", encoding="utf-8", errors="replace") as f:
+        reader = csv.reader(f)
+        header = next(reader)
+        normalized = {col.strip().lower(): i for i, col in enumerate(header)}
+
+        # Build feature index
+        feature_to_col: dict[str, int] = {}
+        for unsw_name, ns_name in UNSW_NB15_COLUMN_MAP.items():
+            if unsw_name in normalized and ns_name not in feature_to_col:
+                feature_to_col[ns_name] = normalized[unsw_name]
+
+        # Find label column
+        label_col = normalized.get("attack_cat") or normalized.get("label")
+        if label_col is None:
+            raise ValueError(f"No label column found in {csv_path}")
+
+        for row in reader:
+            if len(row) <= label_col:
+                continue
+            raw_label = row[label_col].strip().lower()
+            ns_label = UNSW_NB15_LABEL_MAP.get(raw_label)
+            if ns_label is None:
+                continue
+
+            features = []
+            for feat_name in FEATURE_NAMES:
+                col_idx = feature_to_col.get(feat_name)
+                if col_idx is not None and col_idx < len(row):
+                    features.append(_safe_float(row[col_idx]))
+                else:
+                    features.append(0.0)
+
+            X_rows.append(features)
+            y_labels.append(CLASS_TO_ID[ns_label])
+
+    X = np.array(X_rows, dtype=np.float64)
+    y = np.array(y_labels, dtype=np.int64)
+    logger.info("Loaded %d flows from %s", len(y), csv_path.name)
+    return X, y
 
 
 def _build_column_index(header_row: list[str]) -> dict[str, int]:

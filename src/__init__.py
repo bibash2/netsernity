@@ -3,6 +3,6 @@
 __version__ = "1.0.0"
 __author__ = "NetSentry Project"
 
-from . import data, inference, models, monitoring, training, utils
+from . import capture, data, inference, models, monitoring, training, utils
 
-__all__ = ["data", "models", "training", "inference", "utils", "monitoring"]
+__all__ = ["capture", "data", "models", "training", "inference", "utils", "monitoring"]

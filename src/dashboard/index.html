@@ -3,140 +3,251 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>NetSentry // Operator Console</title>
+<title>NetSentry — Network Intrusion Detection</title>
 <link rel="preconnect" href="https://fonts.googleapis.com" />
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;700&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@300;400;500;700&display=swap" rel="stylesheet" />
 <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
-<div class="scanline"></div>
 
+<!-- ─── Top bar ─── -->
 <header class="topbar">
   <div class="brand">
-    <span class="brand-mark">▚▚</span>
-    <span class="brand-name">NET<span class="accent">SENTRY</span></span>
-    <span class="brand-tag">/ OPERATOR CONSOLE v1.0</span>
+    <div class="brand-icon">
+      <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+        <path d="M14 2L26 8v12l-12 6L2 20V8l12-6z" stroke="currentColor" stroke-width="1.5" fill="none"/>
+        <path d="M14 2v24M2 8l12 6 12-6" stroke="currentColor" stroke-width="1" opacity="0.4"/>
+        <circle cx="14" cy="14" r="3" fill="currentColor" opacity="0.8"/>
+      </svg>
+    </div>
+    <div>
+      <div class="brand-name">NetSentry</div>
+      <div class="brand-sub">Network Intrusion Detection System</div>
+    </div>
   </div>
-  <div class="status-cluster">
-    <div class="status-pill" id="status-pill">
-      <span class="dot"></span>
-      <span id="status-text">connecting…</span>
+  <div class="top-right">
+    <div class="status-badge" id="status-badge">
+      <span class="status-dot"></span>
+      <span id="status-text">Connecting…</span>
     </div>
     <div class="clock" id="clock">--:--:--</div>
   </div>
 </header>
 
-<main class="grid">
-  <!-- Telemetry strip -->
-  <section class="panel telemetry">
-    <div class="panel-head">
-      <h2>TELEMETRY</h2>
-      <span class="panel-sub">live inference stats</span>
+<!-- ─── Live Capture Control ─── -->
+<section class="capture-section">
+  <div class="capture-bar">
+    <div class="capture-left">
+      <div class="capture-indicator" id="capture-indicator">
+        <span class="capture-dot"></span>
+        <span id="capture-status-text">Capture Stopped</span>
+      </div>
+      <span class="capture-detail" id="capture-detail">Start live capture to monitor real network traffic</span>
     </div>
-    <div class="stat-row">
-      <div class="stat">
-        <span class="stat-label">predictions</span>
-        <span class="stat-value" id="stat-preds">0</span>
-      </div>
-      <div class="stat">
-        <span class="stat-label">attacks</span>
-        <span class="stat-value danger" id="stat-attacks">0</span>
-      </div>
-      <div class="stat">
-        <span class="stat-label">attack rate</span>
-        <span class="stat-value" id="stat-rate">0.00%</span>
-      </div>
-      <div class="stat">
-        <span class="stat-label">p50</span>
-        <span class="stat-value" id="stat-p50">— ms</span>
-      </div>
-      <div class="stat">
-        <span class="stat-label">p95</span>
-        <span class="stat-value" id="stat-p95">— ms</span>
-      </div>
-      <div class="stat">
-        <span class="stat-label">p99</span>
-        <span class="stat-value" id="stat-p99">— ms</span>
-      </div>
+    <div class="capture-right">
+      <input id="capture-iface" type="text" placeholder="Interface (e.g. en0)" class="capture-input" />
+      <button id="capture-start-btn" class="capture-btn start">▶ Start Capture</button>
+      <button id="capture-stop-btn" class="capture-btn stop" style="display:none">⏹ Stop</button>
     </div>
-  </section>
+  </div>
 
-  <!-- Attack type distribution -->
-  <section class="panel distribution">
-    <div class="panel-head">
-      <h2>THREAT DISTRIBUTION</h2>
-      <span class="panel-sub">alerts by type</span>
+  <!-- Live traffic feed -->
+  <div class="live-feed" id="live-feed" style="display:none">
+    <div class="live-feed-header">
+      <span>🔴 LIVE TRAFFIC</span>
+      <span id="live-feed-count">0 packets</span>
     </div>
-    <div id="distribution-chart" class="dist-chart"></div>
-  </section>
+    <div class="live-feed-list" id="live-feed-list"></div>
+  </div>
+</section>
 
-  <!-- Severity breakdown -->
-  <section class="panel severity">
-    <div class="panel-head">
-      <h2>SEVERITY</h2>
-      <span class="panel-sub">active alerts</span>
-    </div>
-    <div id="severity-blocks" class="severity-blocks">
-      <div class="sev-block" data-sev="critical"><span class="sev-label">CRITICAL</span><span class="sev-count">0</span></div>
-      <div class="sev-block" data-sev="high"><span class="sev-label">HIGH</span><span class="sev-count">0</span></div>
-      <div class="sev-block" data-sev="medium"><span class="sev-label">MEDIUM</span><span class="sev-count">0</span></div>
-      <div class="sev-block" data-sev="low"><span class="sev-label">LOW</span><span class="sev-count">0</span></div>
-    </div>
-  </section>
+<!-- ─── Animated Flow Pipeline ─── -->
+<section class="pipeline-section">
+  <h2 class="section-title">Live Packet Flow</h2>
+  <div class="flow-river">
+    <!-- River canvas for animated packets -->
+    <canvas id="river-canvas"></canvas>
 
-  <!-- Probe console -->
-  <section class="panel probe">
-    <div class="panel-head">
-      <h2>MANUAL PROBE</h2>
-      <span class="panel-sub">submit flow for classification</span>
+    <!-- Station labels overlaid on the river -->
+    <div class="river-stations">
+      <div class="station station-in">
+        <div class="station-icon">📡</div>
+        <div class="station-label">Traffic In</div>
+        <div class="station-count" id="pipe-traffic">0</div>
+      </div>
+      <div class="station station-ai">
+        <div class="station-icon">🧠</div>
+        <div class="station-label">AI Model</div>
+        <div class="station-count" id="pipe-analyzed">0</div>
+      </div>
+      <div class="station station-safe">
+        <div class="station-icon">✅</div>
+        <div class="station-label">Safe</div>
+        <div class="station-count" id="pipe-safe">0</div>
+      </div>
+      <div class="station station-threat">
+        <div class="station-icon">🚨</div>
+        <div class="station-label">Threat</div>
+        <div class="station-count danger" id="pipe-threats">0</div>
+      </div>
+      <div class="station station-block">
+        <div class="station-icon">🛡️</div>
+        <div class="station-label">Blocked</div>
+        <div class="station-count danger" id="pipe-blocked">0</div>
+      </div>
     </div>
-    <div class="probe-controls">
-      <label>
-        preset profile
-        <select id="probe-preset">
-          <option value="benign">BENIGN browsing</option>
-          <option value="ddos">DDoS flood</option>
-          <option value="portscan">PortScan</option>
-          <option value="bruteforce">BruteForce login</option>
-          <option value="botnet">Botnet beacon</option>
-          <option value="infiltration">Infiltration</option>
-          <option value="webattack">WebAttack</option>
-        </select>
-      </label>
-      <label>
-        source IP
-        <input id="probe-source" type="text" placeholder="10.0.0.42" value="10.0.0.42" />
-      </label>
-      <button id="probe-fire" class="fire-btn">► FIRE PROBE</button>
-    </div>
-    <div class="probe-output" id="probe-output">
-      <div class="muted">// awaiting probe…</div>
-    </div>
-  </section>
+  </div>
+</section>
 
-  <!-- Alert stream -->
-  <section class="panel alerts">
-    <div class="panel-head">
-      <h2>ALERT STREAM</h2>
-      <span class="panel-sub"><span id="alert-count">0</span> alerts</span>
-    </div>
-    <div id="alert-filter-bar" class="filter-bar">
-      <button class="filter active" data-sev="all">all</button>
-      <button class="filter" data-sev="critical">critical</button>
-      <button class="filter" data-sev="high">high</button>
-      <button class="filter" data-sev="medium">medium</button>
-      <button class="filter" data-sev="low">low</button>
-    </div>
-    <div id="alert-list" class="alert-list">
-      <div class="muted center">// no alerts yet</div>
-    </div>
-  </section>
+<!-- ─── Main grid ─── -->
+<main class="main-grid">
+
+  <!-- Left: Stats + Probe -->
+  <div class="col-left">
+
+    <!-- Key metrics cards -->
+    <section class="metrics-row">
+      <div class="metric-card">
+        <div class="metric-label">Total Scanned</div>
+        <div class="metric-value" id="m-total">0</div>
+        <div class="metric-sub">network flows</div>
+      </div>
+      <div class="metric-card accent">
+        <div class="metric-label">Attacks Found</div>
+        <div class="metric-value" id="m-attacks">0</div>
+        <div class="metric-sub" id="m-rate">0% attack rate</div>
+      </div>
+      <div class="metric-card danger">
+        <div class="metric-label">IPs Blocked</div>
+        <div class="metric-value" id="m-blocked">0</div>
+        <div class="metric-sub">active blocks</div>
+      </div>
+      <div class="metric-card info">
+        <div class="metric-label">Response Time</div>
+        <div class="metric-value" id="m-latency">—</div>
+        <div class="metric-sub">avg detection speed</div>
+      </div>
+    </section>
+
+    <!-- Threat Breakdown -->
+    <section class="card">
+      <div class="card-head">
+        <h3>Threat Breakdown</h3>
+        <span class="card-sub">What types of attacks were found</span>
+      </div>
+      <div class="card-body" id="threat-breakdown">
+        <div class="empty-state">No threats detected yet — try the simulator below</div>
+      </div>
+    </section>
+
+    <!-- Severity at a glance -->
+    <section class="card">
+      <div class="card-head">
+        <h3>Severity Overview</h3>
+        <span class="card-sub">Alert levels</span>
+      </div>
+      <div class="sev-grid">
+        <div class="sev-card sev-critical" data-sev="critical">
+          <span class="sev-emoji">🔴</span>
+          <span class="sev-name">Critical</span>
+          <span class="sev-num">0</span>
+        </div>
+        <div class="sev-card sev-high" data-sev="high">
+          <span class="sev-emoji">🟠</span>
+          <span class="sev-name">High</span>
+          <span class="sev-num">0</span>
+        </div>
+        <div class="sev-card sev-medium" data-sev="medium">
+          <span class="sev-emoji">🟡</span>
+          <span class="sev-name">Medium</span>
+          <span class="sev-num">0</span>
+        </div>
+        <div class="sev-card sev-low" data-sev="low">
+          <span class="sev-emoji">🔵</span>
+          <span class="sev-name">Low</span>
+          <span class="sev-num">0</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Simulate an attack -->
+    <section class="card simulate-card">
+      <div class="card-head">
+        <h3>🎯 Try It — Simulate an Attack</h3>
+        <span class="card-sub">Pick a traffic type and see the system respond in real time</span>
+      </div>
+      <div class="card-body sim-body">
+        <div class="sim-row">
+          <div class="sim-field">
+            <label>Traffic Type</label>
+            <select id="probe-preset">
+              <option value="benign">✅ Normal Browsing (safe)</option>
+              <option value="ddos">🔴 DDoS Attack</option>
+              <option value="portscan">🔵 Port Scan</option>
+              <option value="bruteforce">🟡 Brute Force Login</option>
+              <option value="botnet">🟠 Botnet Activity</option>
+              <option value="infiltration">🟠 Network Infiltration</option>
+              <option value="webattack">🟡 Web Application Attack</option>
+            </select>
+          </div>
+          <div class="sim-field">
+            <label>Source IP Address</label>
+            <input id="probe-source" type="text" placeholder="203.0.113.42" value="203.0.113.42" />
+          </div>
+          <button id="probe-fire" class="sim-btn">
+            <span class="sim-btn-icon">▶</span> Send Traffic
+          </button>
+        </div>
+        <div class="sim-result" id="probe-output">
+          <div class="empty-state">Pick a traffic type above and click "Send Traffic" to see what happens</div>
+        </div>
+      </div>
+    </section>
+  </div>
+
+  <!-- Right: Blocked IPs + Alert feed -->
+  <div class="col-right">
+
+    <!-- Blocked IPs -->
+    <section class="card blocked-card">
+      <div class="card-head">
+        <h3>🛡️ Blocked IPs</h3>
+        <span class="card-sub"><span id="blocked-count">0</span> attackers currently blocked</span>
+      </div>
+      <div class="card-body" id="blocked-list">
+        <div class="empty-state">No IPs blocked yet — attacks with high confidence are blocked automatically</div>
+      </div>
+    </section>
+
+    <!-- Alert feed -->
+    <section class="card alerts-card">
+      <div class="card-head">
+        <h3>📋 Live Alert Feed</h3>
+        <span class="card-sub"><span id="alert-count">0</span> alerts</span>
+      </div>
+      <div class="alert-filters">
+        <button class="af active" data-sev="all">All</button>
+        <button class="af" data-sev="critical">Critical</button>
+        <button class="af" data-sev="high">High</button>
+        <button class="af" data-sev="medium">Medium</button>
+        <button class="af" data-sev="low">Low</button>
+      </div>
+      <div class="card-body alert-feed" id="alert-list">
+        <div class="empty-state">No alerts yet — simulate an attack to see alerts appear here</div>
+      </div>
+    </section>
+
+  </div>
 </main>
 
-<footer class="footbar">
-  <span>NetSentry — built from scratch · NumPy models · production-grade infrastructure</span>
-  <span><a href="/docs">api docs</a> · <a href="/api/v1/metrics">metrics</a> · <a href="/api/v1/health">health</a></span>
+<footer class="footer">
+  <span>NetSentry — ML-based Network Intrusion Detection · Built from scratch with NumPy</span>
+  <span>
+    <a href="/docs">API Docs</a> ·
+    <a href="/api/v1/metrics">Metrics</a> ·
+    <a href="/api/v1/health">Health Check</a>
+  </span>
 </footer>
 
 <script src="/static/app.js"></script>

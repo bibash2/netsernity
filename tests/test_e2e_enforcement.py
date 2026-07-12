@@ -26,22 +26,40 @@ pytestmark = pytest.mark.skipif(
     reason="Model artifacts missing — run `python -m scripts.train_pipeline --samples 3000` first.",
 )
 
-from src.data.generator import FEATURE_NAMES, PROFILES, _sample_flow
+from src.data.generator import CLASS_TO_ID, FEATURE_NAMES, PROFILES, _sample_flow, load_dataset_csv
 from src.enforcement.backends.noop import NoOpBackend
 from src.enforcement.executor import ResponseExecutor
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────
 
+_DATASET_PATH = ROOT / "data" / "netsentry_dataset.csv"
+_REAL_X, _REAL_Y = None, None
+
+
+def _ensure_dataset():
+    global _REAL_X, _REAL_Y
+    if _REAL_X is None and _DATASET_PATH.exists():
+        _REAL_X, _REAL_Y = load_dataset_csv(_DATASET_PATH)
+
 
 def _generate_flow(attack_type: str, seed: int = 42) -> dict:
-    """Generate a single synthetic flow dict suitable for the predict API."""
+    """Sample a real flow from the dataset, fall back to synthetic."""
+    _ensure_dataset()
+    if _REAL_X is not None:
+        class_id = CLASS_TO_ID[attack_type]
+        mask = _REAL_Y == class_id
+        indices = np.where(mask)[0]
+        if len(indices) > 0:
+            rng = np.random.default_rng(seed)
+            idx = rng.choice(indices)
+            return {FEATURE_NAMES[j]: float(_REAL_X[idx][j]) for j in range(len(FEATURE_NAMES))}
     rng = np.random.default_rng(seed)
     return _sample_flow(attack_type, rng)
 
 
 def _generate_flows(attack_type: str, count: int, base_seed: int = 0) -> list[dict]:
-    """Generate multiple synthetic flows of a given attack type."""
+    """Generate multiple flows of a given attack type."""
     flows = []
     for i in range(count):
         flows.append(_generate_flow(attack_type, seed=base_seed + i))
