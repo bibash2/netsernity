@@ -1,4 +1,12 @@
-"""HTTP route definitions for the NetSentry API."""
+"""HTTP route definitions for the NetSentry API.
+
+Access control matrix (when auth is enabled):
+  Public:                health, ready, metrics
+  Any authenticated:     stats, alerts list, blocked list, capture status
+  Operator or Admin:     predict, batch predict, clear alerts, unblock, flush,
+                         capture start/stop
+  Admin only:            user management (in auth/routes.py)
+"""
 
 from __future__ import annotations
 
@@ -13,7 +21,7 @@ from ..enforcement import ResponseExecutor
 from ..inference import AlertManager, InferenceEngine
 from ..monitoring.metrics import REGISTRY
 from ..utils.logger import get_logger, new_request_id
-from .dependencies import enforce_rate_limit, verify_api_key
+from .dependencies import enforce_rate_limit, get_current_user, require_role
 from .schemas import (
     AlertRecord,
     BatchPredictRequest,
@@ -38,7 +46,7 @@ def build_router(
 ) -> APIRouter:
     router = APIRouter()
 
-    # --------------------------------------------------------------
+    # ── Public ────────────────────────────────────────────────────────
     @router.get("/health", response_model=HealthResponse, tags=["System"])
     def health() -> HealthResponse:
         return HealthResponse(status="ok", version=version, model_loaded=engine.ready())
@@ -55,12 +63,54 @@ def build_router(
     def metrics() -> str:
         return REGISTRY.render()
 
-    # --------------------------------------------------------------
+    # ── Any authenticated user ────────────────────────────────────────
+    @router.get(
+        "/stats",
+        response_model=StatsResponse,
+        tags=["System"],
+        dependencies=[Depends(get_current_user)],
+    )
+    def stats() -> StatsResponse:
+        return StatsResponse(inference=engine.stats(), alerts=alerts.summary())
+
+    @router.get(
+        "/alerts",
+        response_model=list[AlertRecord],
+        tags=["Alerts"],
+        dependencies=[Depends(get_current_user)],
+    )
+    def list_alerts(
+        limit: int = Query(50, ge=1, le=500),
+        severity: Optional[str] = Query(None, pattern="^(info|low|medium|high|critical)$"),
+    ) -> list[AlertRecord]:
+        recent = alerts.recent(limit=limit, severity=severity)
+        return [AlertRecord(**r) for r in recent]
+
+    @router.get(
+        "/blocked",
+        response_model=list[BlockedIPRecord],
+        tags=["Enforcement"],
+        dependencies=[Depends(get_current_user)],
+    )
+    def list_blocked_ips() -> list[BlockedIPRecord]:
+        return [BlockedIPRecord(**r) for r in response_executor.get_blocked_ips()]
+
+    @router.get(
+        "/capture/status",
+        tags=["Live Capture"],
+        dependencies=[Depends(get_current_user)],
+    )
+    def capture_status() -> dict:
+        if sniffer is None:
+            return {"available": False, "reason": "Sniffer not initialized"}
+        return sniffer.stats()
+
+    # ── Operator or Admin ─────────────────────────────────────────────
     @router.post(
         "/predict",
         response_model=PredictResponse,
         tags=["Detection"],
-        dependencies=[Depends(enforce_rate_limit), Depends(verify_api_key)],
+        dependencies=[Depends(enforce_rate_limit), Depends(require_role("admin", "operator"))],
     )
     def predict(req: PredictRequest, request: Request) -> PredictResponse:
         req_id = new_request_id()
@@ -76,7 +126,6 @@ def build_router(
         alert = alerts.record(result_dict, source_ip=req.source_ip)
         alert_id = alert["alert_id"] if alert else None
 
-        # Telemetry
         latency_ms = (time.time() - t0) * 1000
         REGISTRY.observe_histogram("netsentry_prediction_latency_ms", latency_ms, {"route": "predict"})
         REGISTRY.inc_counter(
@@ -99,12 +148,11 @@ def build_router(
             total_latency_ms=round(latency_ms, 3),
         )
 
-    # --------------------------------------------------------------
     @router.post(
         "/predict/batch",
         response_model=BatchPredictResponse,
         tags=["Detection"],
-        dependencies=[Depends(enforce_rate_limit), Depends(verify_api_key)],
+        dependencies=[Depends(enforce_rate_limit), Depends(require_role("admin", "operator"))],
     )
     def predict_batch(req: BatchPredictRequest, request: Request) -> BatchPredictResponse:
         req_id = new_request_id()
@@ -145,33 +193,19 @@ def build_router(
             avg_latency_ms=round(latency_ms / max(1, len(results)), 3),
         )
 
-    # --------------------------------------------------------------
-    @router.get("/stats", response_model=StatsResponse, tags=["System"])
-    def stats() -> StatsResponse:
-        return StatsResponse(inference=engine.stats(), alerts=alerts.summary())
-
-    @router.get("/alerts", response_model=list[AlertRecord], tags=["Alerts"])
-    def list_alerts(
-        limit: int = Query(50, ge=1, le=500),
-        severity: Optional[str] = Query(None, pattern="^(info|low|medium|high|critical)$"),
-    ) -> list[AlertRecord]:
-        recent = alerts.recent(limit=limit, severity=severity)
-        return [AlertRecord(**r) for r in recent]
-
-    @router.delete("/alerts", tags=["Alerts"], dependencies=[Depends(verify_api_key)])
+    @router.delete(
+        "/alerts",
+        tags=["Alerts"],
+        dependencies=[Depends(require_role("admin", "operator"))],
+    )
     def clear_alerts() -> dict:
         alerts.clear()
         return {"cleared": True}
 
-    # -------------------------------------------------------------- Enforcement
-    @router.get("/blocked", response_model=list[BlockedIPRecord], tags=["Enforcement"])
-    def list_blocked_ips() -> list[BlockedIPRecord]:
-        return [BlockedIPRecord(**r) for r in response_executor.get_blocked_ips()]
-
     @router.delete(
         "/blocked/{ip_address}",
         tags=["Enforcement"],
-        dependencies=[Depends(verify_api_key)],
+        dependencies=[Depends(require_role("admin", "operator"))],
     )
     def unblock_ip(ip_address: str) -> dict:
         if response_executor.unblock(ip_address):
@@ -184,20 +218,17 @@ def build_router(
     @router.delete(
         "/blocked",
         tags=["Enforcement"],
-        dependencies=[Depends(verify_api_key)],
+        dependencies=[Depends(require_role("admin", "operator"))],
     )
     def flush_all_blocks() -> dict:
         count = response_executor.flush_all()
         return {"flushed": True, "count": count}
 
-    # -------------------------------------------------------------- Live Capture
-    @router.get("/capture/status", tags=["Live Capture"])
-    def capture_status() -> dict:
-        if sniffer is None:
-            return {"available": False, "reason": "Sniffer not initialized"}
-        return sniffer.stats()
-
-    @router.post("/capture/start", tags=["Live Capture"])
+    @router.post(
+        "/capture/start",
+        tags=["Live Capture"],
+        dependencies=[Depends(require_role("admin", "operator"))],
+    )
     def capture_start(interface: Optional[str] = Query(None)) -> dict:
         if sniffer is None:
             raise HTTPException(400, "Sniffer not initialized")
@@ -210,7 +241,11 @@ def build_router(
             raise HTTPException(500, "Failed to start capture")
         return {"started": True, "interface": sniffer._interface or "default"}
 
-    @router.post("/capture/stop", tags=["Live Capture"])
+    @router.post(
+        "/capture/stop",
+        tags=["Live Capture"],
+        dependencies=[Depends(require_role("admin", "operator"))],
+    )
     def capture_stop() -> dict:
         if sniffer is None:
             raise HTTPException(400, "Sniffer not initialized")

@@ -3,6 +3,44 @@
 const API = "/api/v1";
 const POLL_MS = 2000;
 
+// ── Auth ──
+const TOKEN_KEY = "netsentry_token";
+const nsToken = localStorage.getItem(TOKEN_KEY);
+const nsRole = localStorage.getItem("netsentry_role") || "viewer";
+const nsUsername = localStorage.getItem("netsentry_username") || "";
+const nsName = localStorage.getItem("netsentry_name") || nsUsername;
+
+if (!nsToken) {
+  window.location.href = "/login";
+}
+
+function authHeaders() {
+  return nsToken ? { "Authorization": "Bearer " + nsToken } : {};
+}
+
+// Display user info
+document.getElementById("user-display-name").textContent = nsUsername;
+const roleBadge = document.getElementById("user-role-badge");
+roleBadge.textContent = nsRole.toUpperCase();
+roleBadge.classList.add("role-" + nsRole);
+
+// Logout
+document.getElementById("logout-btn").addEventListener("click", function () {
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem("netsentry_role");
+  localStorage.removeItem("netsentry_name");
+  localStorage.removeItem("netsentry_username");
+  window.location.href = "/login";
+});
+
+// Role-based UI restrictions
+if (nsRole === "viewer") {
+  var simCard = document.querySelector(".simulate-card");
+  if (simCard) simCard.style.display = "none";
+  var captureRight = document.querySelector(".capture-right");
+  if (captureRight) captureRight.style.display = "none";
+}
+
 // ── Real CIC-IDS2017 flow presets (high-confidence samples) ──
 const PRESETS = {
   benign: {
@@ -106,21 +144,36 @@ function fmtTime(iso) {
   return new Date(iso).toLocaleTimeString("en-GB", { hour12: false });
 }
 
+function handleAuthError(r) {
+  if (r.status === 401) {
+    localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem("netsentry_role");
+    localStorage.removeItem("netsentry_name");
+    localStorage.removeItem("netsentry_username");
+    window.location.href = "/login";
+    throw new Error("Session expired");
+  }
+}
+
 async function apiGet(path) {
-  const r = await fetch(API + path);
+  const r = await fetch(API + path, { headers: authHeaders() });
+  handleAuthError(r);
   if (!r.ok) throw new Error(`${r.status}`);
   return r.json();
 }
 async function apiPost(path, body) {
+  const headers = Object.assign({ "Content-Type": "application/json" }, authHeaders());
   const r = await fetch(API + path, {
-    method: "POST", headers: { "Content-Type": "application/json" },
+    method: "POST", headers: headers,
     body: JSON.stringify(body),
   });
+  handleAuthError(r);
   if (!r.ok) throw new Error(`${r.status}: ${await r.text()}`);
   return r.json();
 }
 async function apiDelete(path) {
-  const r = await fetch(API + path, { method: "DELETE" });
+  const r = await fetch(API + path, { method: "DELETE", headers: authHeaders() });
+  handleAuthError(r);
   if (!r.ok) throw new Error(`${r.status}`);
   return r.json();
 }
@@ -156,6 +209,7 @@ async function poll() {
     renderBlocked(blocked);
     renderPipeline(stats, blocked);
   } catch (e) {
+    if (e.message === "Session expired") return;
     setStatus(false);
   }
 }
@@ -271,10 +325,15 @@ function renderBlocked(blocked) {
     return;
   }
 
+  const canUnblock = nsRole === "admin" || nsRole === "operator";
+
   host.innerHTML = blocked.map(b => {
     const mins = Math.ceil(b.remaining_seconds / 60);
     const ttl = mins > 60 ? Math.ceil(mins / 60) + "h " + (mins % 60) + "m" : mins + " min";
     const action = b.action_type === "drop" ? "Dropped" : b.action_type === "block" ? "Blocked" : b.action_type;
+    const unblockBtn = canUnblock
+      ? `<button class="unblock-btn" data-ip="${b.ip_address}">Unblock</button>`
+      : '';
     return `<div class="blocked-entry">
       <div class="blocked-info">
         <div class="blocked-ip">${b.ip_address}</div>
@@ -285,18 +344,20 @@ function renderBlocked(blocked) {
           <span>🔒 ${action}</span>
         </div>
       </div>
-      <button class="unblock-btn" data-ip="${b.ip_address}">Unblock</button>
+      ${unblockBtn}
     </div>`;
   }).join("");
 
-  host.querySelectorAll(".unblock-btn").forEach(btn => {
-    btn.addEventListener("click", async () => {
-      try {
-        await apiDelete("/blocked/" + encodeURIComponent(btn.dataset.ip));
-        poll();
-      } catch (e) { console.error(e); }
+  if (canUnblock) {
+    host.querySelectorAll(".unblock-btn").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        try {
+          await apiDelete("/blocked/" + encodeURIComponent(btn.dataset.ip));
+          poll();
+        } catch (e) { console.error(e); }
+      });
     });
-  });
+  }
 }
 
 // ── Filter buttons ──
@@ -422,8 +483,6 @@ async function pollCapture() {
       stopBtn.style.display = "";
       liveFeed.style.display = "";
       document.getElementById("live-feed-count").textContent = `${cs.packets_captured} packets captured`;
-
-      // Live feed entries now pushed via WebSocket — no polling needed
     } else {
       statusText.textContent = "Capture Stopped";
       detail.textContent = cs.scapy_available
@@ -440,7 +499,8 @@ let wsReconnectTimer = null;
 
 function connectWebSocket() {
   const proto = location.protocol === "https:" ? "wss:" : "ws:";
-  ws = new WebSocket(`${proto}//${location.host}/ws`);
+  const tokenParam = nsToken ? "?token=" + encodeURIComponent(nsToken) : "";
+  ws = new WebSocket(`${proto}//${location.host}/ws${tokenParam}`);
 
   ws.onopen = () => {
     console.log("WebSocket connected");
@@ -450,10 +510,8 @@ function connectWebSocket() {
   ws.onmessage = (e) => {
     const event = JSON.parse(e.data);
     if (event.type === "packets") {
-      // Raw packets arriving — show as unclassified (blue) dots entering the river
       river.newRaw += event.count;
     } else if (event.type === "flow") {
-      // Classified flow — show colored particle (green safe / red attack)
       if (event.is_attack) {
         river.newAttack += 1;
       } else {
@@ -536,13 +594,12 @@ window.addEventListener("resize", resizeCanvas);
 // Particle types: "raw" (unclassified incoming), "safe" (benign), "attack" (threat)
 class Particle {
   constructor(type) {
-    // type: "raw" | "safe" | "attack"
     this.type = type;
     this.x = 0;
     this.y = 0;
     this.progress = 0;
     this.speed = type === "raw"
-      ? 0.006 + Math.random() * 0.006   // raw packets move faster (short path)
+      ? 0.006 + Math.random() * 0.006
       : 0.003 + Math.random() * 0.004;
     this.size = type === "raw" ? 2 + Math.random() * 1.5 : 2.5 + Math.random() * 2;
     this.opacity = 0.6 + Math.random() * 0.4;
@@ -554,20 +611,17 @@ class Particle {
   update(w, h) {
     this.progress += this.speed;
 
-    // Raw packets only travel from start to AI station (first ~52% of river)
     if (this.type === "raw") {
       if (this.progress > STATIONS.forkX) { this.alive = false; return; }
       this.x = this.progress * w;
       const wave = Math.sin(this.phase + this.progress * 10) * 3;
       this.y = MAIN_Y * h + this.yOffset + wave;
-      // Fade
       if (this.progress < 0.03) this.opacity = this.progress / 0.03;
       else if (this.progress > STATIONS.forkX - 0.05)
         this.opacity = (STATIONS.forkX - this.progress) / 0.05;
       return;
     }
 
-    // Classified particles: start from AI station, branch to safe/threat
     if (this.progress > 1) { this.alive = false; return; }
 
     const p = this.progress;
@@ -607,7 +661,6 @@ class Particle {
       ctx.fillStyle = `rgba(52, 211, 153, ${this.opacity})`;
       ctx.shadowColor = "rgba(52, 211, 153, 0.4)";
     } else {
-      // Raw/unclassified — white/blue
       ctx.fillStyle = `rgba(96, 165, 250, ${this.opacity * 0.7})`;
       ctx.shadowColor = "rgba(96, 165, 250, 0.3)";
     }
@@ -618,14 +671,12 @@ class Particle {
 }
 
 function spawnParticles() {
-  // Raw packets — blue dots flowing into the AI station
   const newRaw = river.newRaw;
   river.newRaw = 0;
   for (let i = 0; i < Math.min(newRaw, 10) && particles.length < MAX_PARTICLES; i++) {
     particles.push(new Particle("raw"));
   }
 
-  // Classified flows — green/red dots from AI station onward
   const newSafe = river.newSafe;
   const newAttack = river.newAttack;
   river.newSafe = 0;
@@ -639,7 +690,6 @@ function spawnParticles() {
 }
 
 function drawRiverPaths(w, h) {
-  // Main river path (faint glow line)
   ctx.beginPath();
   ctx.moveTo(0, MAIN_Y * h);
   ctx.lineTo(STATIONS.forkX * w, MAIN_Y * h);
@@ -647,7 +697,6 @@ function drawRiverPaths(w, h) {
   ctx.lineWidth = 30;
   ctx.stroke();
 
-  // Safe branch
   ctx.beginPath();
   ctx.moveTo(STATIONS.forkX * w, MAIN_Y * h);
   ctx.quadraticCurveTo(STATIONS.forkX * w + 60, SAFE_Y * h, w, SAFE_Y * h);
@@ -655,7 +704,6 @@ function drawRiverPaths(w, h) {
   ctx.lineWidth = 20;
   ctx.stroke();
 
-  // Threat branch
   ctx.beginPath();
   ctx.moveTo(STATIONS.forkX * w, MAIN_Y * h);
   ctx.quadraticCurveTo(STATIONS.forkX * w + 60, THREAT_Y * h, w, THREAT_Y * h);
@@ -663,13 +711,11 @@ function drawRiverPaths(w, h) {
   ctx.lineWidth = 16;
   ctx.stroke();
 
-  // Fork point glow
   ctx.beginPath();
   ctx.arc(STATIONS.forkX * w, MAIN_Y * h, 6, 0, Math.PI * 2);
   ctx.fillStyle = "rgba(96, 165, 250, 0.3)";
   ctx.fill();
 
-  // Station markers (subtle dots on the path)
   const stationPositions = [
     { x: STATIONS.inX, y: MAIN_Y },
     { x: STATIONS.aiX, y: MAIN_Y },
@@ -691,13 +737,9 @@ function animateRiver() {
 
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-  // Draw path lines
   drawRiverPaths(w, h);
-
-  // Spawn new particles
   spawnParticles();
 
-  // Update and draw particles
   for (let i = particles.length - 1; i >= 0; i--) {
     particles[i].update(w, h);
     if (!particles[i].alive) {

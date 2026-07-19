@@ -4,9 +4,10 @@ NetSentry FastAPI application factory.
 Call `create_app(config)` to obtain a fully-wired ASGI app with:
     - Trained-model loading at startup
     - Dashboard UI served at /
+    - Login page served at /login (when auth enabled)
     - REST API routes under /api/v1
     - Prometheus /metrics endpoint
-    - API-key auth and rate limiting
+    - JWT auth + API-key auth and rate limiting
     - Structured logging per request
 """
 
@@ -33,10 +34,10 @@ from ..inference import AlertManager, InferenceEngine
 from ..monitoring.metrics import REGISTRY
 from ..utils.config import Config
 from ..utils.logger import get_logger
-from .dependencies import ApiKeyAuth, RateLimiter, configure_dependencies
+from .dependencies import ApiKeyAuth, RateLimiter, configure_auth, configure_dependencies
 from .routes import build_router
 
-VERSION = "1.0.0"
+VERSION = "1.1.0"
 logger = get_logger(__name__)
 
 
@@ -77,6 +78,23 @@ def create_app(config: Config) -> FastAPI:
         rate_limiter=RateLimiter(max_requests=config.api.rate_limit_per_minute, window_seconds=60),
         api_key_auth=ApiKeyAuth(config.api.api_key),
     )
+
+    # Auth — JWT + RBAC
+    jwt_handler = None
+    if config.auth.enabled:
+        from ..auth import JWTHandler, UserStore
+        from ..auth.routes import build_auth_router
+
+        expiry_seconds = config.auth.token_expiry_hours * 3600
+        jwt_handler = JWTHandler(config.auth.jwt_secret, expiry_seconds)
+        user_store = UserStore(config.auth.users_file)
+        configure_auth(jwt_handler)
+
+        auth_router = build_auth_router(user_store, jwt_handler, expiry_seconds)
+        app.include_router(auth_router, prefix="/api/v1")
+        logger.info("Auth enabled — JWT + RBAC, users_file=%s", config.auth.users_file)
+    else:
+        configure_auth(None)
 
     # Load models
     engine = InferenceEngine(models_dir=config.paths.models_dir)
@@ -131,6 +149,11 @@ def create_app(config: Config) -> FastAPI:
 
     @app.websocket("/ws")
     async def websocket_endpoint(ws: WebSocket):
+        if jwt_handler is not None:
+            token = ws.query_params.get("token")
+            if not token or jwt_handler.verify_token(token) is None:
+                await ws.close(code=4001, reason="Authentication required")
+                return
         await ws.accept()
         ws_clients.add(ws)
         try:
@@ -155,7 +178,6 @@ def create_app(config: Config) -> FastAPI:
             alert_id=alert_id,
         )
 
-        # Push to all connected dashboards instantly
         ws_broadcast_sync({
             "type": "flow",
             "source_ip": source_ip,
@@ -197,6 +219,13 @@ def create_app(config: Config) -> FastAPI:
         if index.exists():
             return FileResponse(index)
         return JSONResponse({"message": "NetSentry is running", "docs": "/docs"})
+
+    @app.get("/login", include_in_schema=False)
+    def login_page() -> FileResponse:
+        login = dashboard_dir / "login.html"
+        if login.exists():
+            return FileResponse(login)
+        return JSONResponse({"message": "Login page not found", "docs": "/docs"})
 
     # Global error handler so errors emit JSON, not HTML
     @app.exception_handler(Exception)

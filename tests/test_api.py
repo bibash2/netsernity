@@ -31,7 +31,8 @@ def client() -> TestClient:
     from src.utils.config import load_config
 
     cfg = load_config("config/config.yaml")
-    cfg.api.api_key = ""  # disable auth for tests
+    cfg.api.api_key = ""    # disable API key auth for tests
+    cfg.auth.enabled = False  # disable JWT auth for tests
     app = create_app(cfg)
     return TestClient(app)
 

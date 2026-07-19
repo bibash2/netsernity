@@ -93,6 +93,7 @@ def client():
 
     cfg = load_config("config/config.yaml")
     cfg.api.api_key = ""
+    cfg.auth.enabled = False
     cfg.enforcement.enabled = True
     cfg.enforcement.backend = "noop"
     cfg.enforcement.min_confidence_to_enforce = 0.80

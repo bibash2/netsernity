@@ -71,3 +71,11 @@ enforcement:
   nftables_chain: blocked             # chain name within the table
   allowlisted_cidrs:                  # never block these networks
     - "127.0.0.1/32"
+
+# Authentication & access control
+# Roles: admin (full access), operator (monitor + manage), viewer (read-only)
+auth:
+  enabled: true
+  jwt_secret: "netsentry-dev-secret-change-in-production"
+  token_expiry_hours: 24
+  users_file: data/users.json

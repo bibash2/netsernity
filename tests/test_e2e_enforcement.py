@@ -92,7 +92,8 @@ def enforcement_app():
     from src.utils.config import load_config
 
     cfg = load_config("config/config.yaml")
-    cfg.api.api_key = ""          # disable auth for tests
+    cfg.api.api_key = ""            # disable API key auth for tests
+    cfg.auth.enabled = False        # disable JWT auth for tests
     cfg.enforcement.enabled = True
     cfg.enforcement.backend = "noop"
     cfg.enforcement.min_confidence_to_enforce = 0.80

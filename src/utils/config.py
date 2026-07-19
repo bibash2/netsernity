@@ -94,6 +94,14 @@ class EnforcementConfig:
 
 
 @dataclass
+class AuthConfig:
+    enabled: bool = False
+    jwt_secret: str = "netsentry-change-me-in-production"
+    token_expiry_hours: int = 24
+    users_file: str = "data/users.json"
+
+
+@dataclass
 class Config:
     data: DataConfig = field(default_factory=DataConfig)
     model: ModelConfig = field(default_factory=ModelConfig)
@@ -101,6 +109,7 @@ class Config:
     paths: PathsConfig = field(default_factory=PathsConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     enforcement: EnforcementConfig = field(default_factory=EnforcementConfig)
+    auth: AuthConfig = field(default_factory=AuthConfig)
 
     def as_dict(self) -> dict:
         return asdict(self)
@@ -167,6 +176,7 @@ def load_config(path: str | Path | None = None) -> Config:
 
     # Reconstruct dataclasses
     enforcement_data = default.get("enforcement", {})
+    auth_data = default.get("auth", {})
     cfg = Config(
         data=DataConfig(**default["data"]),
         model=ModelConfig(**default["model"]),
@@ -174,6 +184,7 @@ def load_config(path: str | Path | None = None) -> Config:
         paths=PathsConfig(**default["paths"]),
         logging=LoggingConfig(**default["logging"]),
         enforcement=EnforcementConfig(**enforcement_data),
+        auth=AuthConfig(**auth_data),
     )
     return cfg
 
