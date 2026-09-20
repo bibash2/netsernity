@@ -86,16 +86,29 @@ External libraries used only for infrastructure: `numpy` (arrays), `fastapi` + `
 
 ## Results
 
-Full-scale run on 50,000 synthetic CIC-IDS-style flows, 30 features, seven classes:
+Trained on **real traffic**: the corrected CIC-IDS2017 re-extraction by Liu, Engelen et al.
+(IEEE CNS 2022 — fixed CICFlowMeter, relabelled flows). 215,307 deduplicated flows, 30 features,
+seven classes, **no synthetic padding**. Scored on a 43,062-row stratified held-out split:
 
-| Model                  | Accuracy | Macro F1 | Training | Inference      |
-| ---------------------- | :------: | :------: | :------: | :------------: |
-| Random Forest          |  99.3%   |  99.2%   |   ~76 s  |  0.30 ms/flow  |
-| MLP (from scratch)     |  98.2%   |  96.8%   |    1.4 s |  0.002 ms/flow |
-| **Ensemble**           |**99.1%** |**98.5%** |     —    |  0.63 ms/flow  |
-| Isolation Forest (AUC) |  98.3%   |     —    |    0.5 s |       —        |
+| Model                  | Accuracy | Macro F1 |   FPR   | Detection rate | Training (8 cores) |
+| ---------------------- | :------: | :------: | :-----: | :------------: | :----------------: |
+| Random Forest          |  99.94%  |  96.9%   |  0.03%  |     99.86%     |       262 s        |
+| MLP (from scratch)     |  99.83%  |  89.9%   |  0.11%  |     99.69%     |        27 s        |
+| **Ensemble (RF .9 / MLP .1, weights tuned on val)** | **99.94%** | **97.3%** | **0.03%** | **99.86%** | — |
+| Isolation Forest (AUC) |  93.9%   |    —     |    —    |       —        |        16 s        |
 
-Numbers measured by the training pipeline itself — reproduce with `make train && cat models_artifacts/reports/training_metrics.json`.
+Per-class recall (ensemble): BENIGN 100% · DDoS 100% · PortScan 99.6% · BruteForce 99.6% ·
+Botnet 100% · Infiltration 85.7% (7 test rows) · WebAttack 81.0% (21 test rows). The last two
+classes are tiny in the real data — treat their numbers as indicative only.
+
+**Why real data matters.** The previous model was trained on a 15 % Kaggle subsample that held
+26 real PortScan, 2 Botnet and 0 Infiltration flows, padded to 1,000 each with synthetic rows.
+It reported 99.4 % on its own split — but on the real held-out flows above it scores **69 %
+accuracy with a 36 % false-positive rate** and 0 % recall on BruteForce and WebAttack
+(`python -m scripts.compare_models`).
+
+Reproduce: `make train-real` (downloads the 343 MB corrected dataset, trains, writes
+`models_artifacts/reports/training_metrics.json`), then `python -m scripts.tune_ensemble`.
 
 ## Quick start
 

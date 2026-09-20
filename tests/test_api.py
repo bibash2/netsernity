@@ -31,7 +31,8 @@ def client() -> TestClient:
     from src.utils.config import load_config
 
     cfg = load_config("config/config.yaml")
-    cfg.api.api_key = ""  # disable auth for tests
+    cfg.api.api_key = ""    # disable API key auth for tests
+    cfg.auth.enabled = False  # disable JWT auth for tests
     app = create_app(cfg)
     return TestClient(app)
 
@@ -45,11 +46,22 @@ BENIGN_FLOW = {
 }
 
 
+# A real DDoS (LOIC-HTTP) flow from the corrected CIC-IDS2017 set — the model is
+# trained on real traffic, so the fixture must be a real attack shape, not an
+# invented one (the previous hand-written flow never occurs in captured data).
 DDOS_FLOW = {
-    "flow_duration": 6000, "total_fwd_packets": 5000, "total_bwd_packets": 3,
-    "fwd_packet_length_mean": 60, "flow_bytes_per_sec": 5000000,
-    "flow_packets_per_sec": 80000, "syn_flag_count": 3000,
-    "packet_length_mean": 60, "avg_packet_size": 60,
+    "flow_duration": 254975, "total_fwd_packets": 8, "total_bwd_packets": 8,
+    "fwd_packet_length_mean": 45.875, "bwd_packet_length_mean": 1449.375,
+    "flow_bytes_per_sec": 46914.4034, "flow_packets_per_sec": 62.7513,
+    "fwd_iat_mean": 36425.0, "bwd_iat_mean": 33863.4286, "fwd_iat_std": 77876.1135,
+    "packet_length_mean": 747.625, "packet_length_std": 1486.0641,
+    "packet_length_variance": 2208386.65,
+    "fin_flag_count": 2, "syn_flag_count": 2, "rst_flag_count": 3, "psh_flag_count": 2,
+    "ack_flag_count": 12, "urg_flag_count": 0, "down_up_ratio": 1,
+    "avg_packet_size": 747.625, "fwd_segment_size_avg": 45.875, "bwd_segment_size_avg": 1449.375,
+    "subflow_fwd_packets": 0, "subflow_bwd_packets": 0,
+    "init_win_bytes_fwd": 29200, "init_win_bytes_bwd": 235,
+    "active_mean": 0, "idle_mean": 0, "fwd_header_length": 228,
 }
 
 

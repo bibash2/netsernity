@@ -20,8 +20,18 @@ python -m scripts.run_server
 Verify:
 ```bash
 curl http://localhost:8000/api/v1/health
-open http://localhost:8000                    # dashboard
+open http://localhost:8000                    # dashboard (redirects to /login when auth enabled)
 ```
+
+Auth is enabled by default. Default credentials:
+
+| Username | Password | Role |
+| -------- | -------- | ---- |
+| admin | admin123 | Administrator |
+| operator | operator123 | Operator |
+| viewer | viewer123 | Viewer |
+
+Change the JWT secret and default passwords before any non-local deployment.
 
 Training on 20 k samples takes ~90 s on a laptop. For a quick smoke-test, drop to `--samples 3000` (~15 s).
 
@@ -81,15 +91,16 @@ kubectl apply -f deployment/kubernetes/training-job.yaml      # trainer Job + Cr
 kubectl apply -f deployment/kubernetes/deployment.yaml        # API Deployment + Service + HPA + PDB
 ```
 
-### 3.3 (Optional) API-key secret
+### 3.3 Secrets (API key and JWT)
 
 ```bash
 kubectl create secret generic netsentry-secret \
         --namespace netsentry \
-        --from-literal=api-key="$(openssl rand -hex 32)"
+        --from-literal=api-key="$(openssl rand -hex 32)" \
+        --from-literal=jwt-secret="$(openssl rand -hex 32)"
 ```
 
-Absent the secret, the Deployment's `optional: true` reference still succeeds and auth is disabled — fine for a private cluster, never for public exposure.
+Map the JWT secret to `NETSENTRY_AUTH__JWT_SECRET` in the Deployment env. Absent the secrets, the Deployment's `optional: true` reference still succeeds and auth uses the default dev secret — fine for a private cluster, never for public exposure.
 
 ### 3.4 Watch progress
 
@@ -178,6 +189,8 @@ kubectl -n netsentry exec deploy/netsentry-api -- \
 
 Before exposing publicly:
 
+- [ ] Set `NETSENTRY_AUTH__JWT_SECRET` to a random 64-hex secret (never use the default dev secret)
+- [ ] Change all default user passwords (`admin123`, `operator123`, `viewer123`)
 - [ ] Set `NETSENTRY_API__API_KEY` to a random 64-hex secret
 - [ ] Restrict `api.cors_origins` from `["*"]` to your actual origin(s)
 - [ ] Put the API behind TLS (ingress-nginx + cert-manager, or a CDN/WAF)
@@ -186,6 +199,7 @@ Before exposing publicly:
 - [ ] Set resource limits (already templated — adjust to your node sizes)
 - [ ] Run a penetration test against the `/predict` endpoint to probe for edge cases
 - [ ] Verify the container runs as non-root (`kubectl exec` and run `id` — must show uid=1000)
+- [ ] Ensure `data/users.json` is excluded from version control and backed up
 
 ---
 
@@ -199,3 +213,5 @@ Before exposing publicly:
 | p95 latency spikes above 20 ms                       | Cold process; first request per worker      | Warm-up hook or prefetch on startup                   |
 | HPA stays at `minReplicas` despite load              | Metrics server not installed                | `kubectl apply -f metrics-server.yaml`                |
 | 429 on every request                                 | Rate limit too tight for real traffic       | Raise `NETSENTRY_API__RATE_LIMIT_PER_MINUTE`          |
+| 401 on all requests after restart                    | JWT secret changed; old tokens are invalid  | Users must re-login; keep secret stable across deploys|
+| Cannot login — default credentials rejected          | Passwords were changed or `users.json` lost | Delete `data/users.json` to re-seed defaults, then change passwords |

@@ -31,8 +31,8 @@ model:
 
   # Ensemble — higher anomaly_boost = IF needs stronger signal to override benign
   # RF gets more weight since it's the strongest supervised model
-  ensemble_rf_weight: 0.60
-  ensemble_mlp_weight: 0.40
+  ensemble_rf_weight: 0.9
+  ensemble_mlp_weight: 0.1
   ensemble_anomaly_boost: 0.90
 
 api:
@@ -71,3 +71,11 @@ enforcement:
   nftables_chain: blocked             # chain name within the table
   allowlisted_cidrs:                  # never block these networks
     - "127.0.0.1/32"
+
+# Authentication & access control
+# Roles: admin (full access), operator (monitor + manage), viewer (read-only)
+auth:
+  enabled: true
+  jwt_secret: "netsentry-dev-secret-change-in-production"
+  token_expiry_hours: 24
+  users_file: data/users.json

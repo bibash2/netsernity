@@ -134,58 +134,47 @@ def evaluate_dataset(
     }
 
 
-def evaluate_pcap(ensemble, preprocessor, pcap_path: str, min_packets: int = 3):
-    """Evaluate against a pcap file by extracting flows."""
+def evaluate_pcap(ensemble, preprocessor, pcap_path: str, min_packets: int = 2):
+    """Evaluate against a pcap file by extracting flows the way CICFlowMeter does."""
     try:
-        from scapy.all import rdpcap, IP, TCP, UDP
+        from scapy.all import rdpcap
     except ImportError:
         print("scapy required for pcap evaluation. Install: pip install scapy")
         sys.exit(1)
 
-    from src.capture.sniffer import FlowAccumulator
+    from src.capture.sniffer import FLOW_TIMEOUT_S, FlowAccumulator, parse_packet
 
     print(f"\nReading pcap: {pcap_path}")
     packets = rdpcap(pcap_path)
     print(f"Loaded {len(packets)} packets")
 
-    # Build flows from packets
-    flows: dict[tuple, FlowAccumulator] = {}
+    # Build flows from packets — same parser + termination rules as the live
+    # sniffer (payload lengths, transport headers, RST / both-FIN close, 120 s cut)
+    active: dict[tuple, FlowAccumulator] = {}
+    finished: list[FlowAccumulator] = []
     for pkt in packets:
-        if not pkt.haslayer(IP):
+        rec = parse_packet(pkt)
+        if rec is None:
             continue
-        ip = pkt[IP]
-        src_ip, dst_ip, proto = ip.src, ip.dst, ip.proto
-        src_port = dst_port = 0
-        tcp_flags = win_size = 0
-        header_len = ip.ihl * 4
-
-        if pkt.haslayer(TCP):
-            tcp = pkt[TCP]
-            src_port, dst_port = tcp.sport, tcp.dport
-            tcp_flags = int(tcp.flags)
-            win_size = tcp.window
-            header_len += tcp.dataofs * 4 if tcp.dataofs else 20
-        elif pkt.haslayer(UDP):
-            udp = pkt[UDP]
-            src_port, dst_port = udp.sport, udp.dport
-            header_len += 8
-
+        (src_ip, dst_ip, src_port, dst_port, proto,
+         payload_len, header_len, tcp_flags, win_size, timestamp) = rec
         fwd_key = (src_ip, dst_ip, src_port, dst_port, proto)
         bwd_key = (dst_ip, src_ip, dst_port, src_port, proto)
-        length = len(pkt)
-        timestamp = float(pkt.time)
 
-        if fwd_key in flows:
-            flows[fwd_key].add_packet(length, True, timestamp, tcp_flags, win_size, header_len)
-        elif bwd_key in flows:
-            flows[bwd_key].add_packet(length, False, timestamp, tcp_flags, win_size, header_len)
-        else:
-            flow = FlowAccumulator(
-                src_ip=src_ip, dst_ip=dst_ip,
-                src_port=src_port, dst_port=dst_port, protocol=proto,
-            )
-            flow.add_packet(length, True, timestamp, tcp_flags, win_size, header_len)
-            flows[fwd_key] = flow
+        key = fwd_key if fwd_key in active else bwd_key if bwd_key in active else None
+        if key is not None and timestamp - active[key].start_time > FLOW_TIMEOUT_S:
+            finished.append(active.pop(key))
+            key = None
+        if key is None:
+            key = fwd_key
+            active[key] = FlowAccumulator(src_ip=src_ip, dst_ip=dst_ip,
+                                          src_port=src_port, dst_port=dst_port, protocol=proto)
+        flow = active[key]
+        flow.add_packet(payload_len, key == fwd_key, timestamp, tcp_flags, win_size, header_len)
+        if flow.closed:
+            finished.append(active.pop(key))
+    finished.extend(active.values())
+    flows = {i: f for i, f in enumerate(finished)}
 
     # Extract features and classify
     results = {"BENIGN": 0}

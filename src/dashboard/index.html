@@ -32,6 +32,11 @@
       <span id="status-text">Connecting…</span>
     </div>
     <div class="clock" id="clock">--:--:--</div>
+    <div class="user-menu" id="user-menu">
+      <span class="user-name" id="user-display-name"></span>
+      <span class="user-role-badge" id="user-role-badge"></span>
+      <button class="logout-btn" id="logout-btn" title="Sign out">Logout</button>
+    </div>
   </div>
 </header>
 
@@ -62,40 +67,122 @@
   </div>
 </section>
 
-<!-- ─── Animated Flow Pipeline ─── -->
+<!-- ─── Detection Pipeline (animated river) ─── -->
 <section class="pipeline-section">
-  <h2 class="section-title">Live Packet Flow</h2>
-  <div class="flow-river">
-    <!-- River canvas for animated packets -->
-    <canvas id="river-canvas"></canvas>
+  <h2 class="section-title">Detection Pipeline</h2>
+  <div class="pipeline">
+    <div class="pipe-stage incoming">
+      <div class="pipe-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20z"/>
+          <path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10A15.3 15.3 0 0 1 12 2z"/>
+        </svg>
+      </div>
+      <span class="pipe-value" id="pipe-traffic">0</span>
+      <span class="pipe-label">Traffic In</span>
+    </div>
 
-    <!-- Station labels overlaid on the river -->
+    <div class="pipe-connector">
+      <div class="pipe-connector-line"></div>
+      <div class="pipe-connector-dot"></div>
+    </div>
+
+    <div class="pipe-stage model">
+      <div class="pipe-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+          <path d="M2 17l10 5 10-5"/>
+          <path d="M2 12l10 5 10-5"/>
+        </svg>
+      </div>
+      <span class="pipe-value" id="pipe-analyzed">0</span>
+      <span class="pipe-label">AI Model</span>
+    </div>
+
+    <div class="pipe-connector">
+      <div class="pipe-connector-line"></div>
+      <div class="pipe-connector-dot"></div>
+    </div>
+
+    <div class="pipe-stage safe">
+      <div class="pipe-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+          <path d="M20 6L9 17l-5-5"/>
+        </svg>
+      </div>
+      <span class="pipe-value" id="pipe-safe">0</span>
+      <span class="pipe-label">Safe</span>
+    </div>
+
+    <div class="pipe-connector threat-conn">
+      <div class="pipe-connector-line threat-line"></div>
+      <div class="pipe-connector-dot threat-dot"></div>
+    </div>
+
+    <div class="pipe-stage threat">
+      <div class="pipe-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
+          <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
+        </svg>
+      </div>
+      <span class="pipe-value" id="pipe-threats">0</span>
+      <span class="pipe-label">Threats</span>
+    </div>
+
+    <div class="pipe-connector">
+      <div class="pipe-connector-line"></div>
+      <div class="pipe-connector-dot"></div>
+    </div>
+
+    <div class="pipe-stage blocked">
+      <div class="pipe-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+          <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        </svg>
+      </div>
+      <span class="pipe-value" id="pipe-blocked">0</span>
+      <span class="pipe-label">Blocked</span>
+    </div>
+  </div>
+
+  <div class="flow-river">
+    <canvas id="river-canvas"></canvas>
     <div class="river-stations">
-      <div class="station station-in">
-        <div class="station-icon">📡</div>
-        <div class="station-label">Traffic In</div>
-        <div class="station-count" id="pipe-traffic">0</div>
-      </div>
-      <div class="station station-ai">
-        <div class="station-icon">🧠</div>
-        <div class="station-label">AI Model</div>
-        <div class="station-count" id="pipe-analyzed">0</div>
-      </div>
-      <div class="station station-safe">
-        <div class="station-icon">✅</div>
-        <div class="station-label">Safe</div>
-        <div class="station-count" id="pipe-safe">0</div>
-      </div>
-      <div class="station station-threat">
-        <div class="station-icon">🚨</div>
-        <div class="station-label">Threat</div>
-        <div class="station-count danger" id="pipe-threats">0</div>
-      </div>
-      <div class="station station-block">
-        <div class="station-icon">🛡️</div>
-        <div class="station-label">Blocked</div>
-        <div class="station-count danger" id="pipe-blocked">0</div>
-      </div>
+      <div class="station" id="station-in"><div class="station-icon">📡</div><div class="station-label">Traffic In</div><div class="station-count" id="st-in-count">0</div></div>
+      <div class="station" id="station-model"><div class="station-icon">🧠</div><div class="station-label">AI Model</div><div class="station-count" id="st-model-count">0</div></div>
+      <div class="station" id="station-safe"><div class="station-icon">✅</div><div class="station-label">Safe</div><div class="station-count" id="st-safe-count">0</div></div>
+      <div class="station" id="station-threat"><div class="station-icon">🚨</div><div class="station-label">Threat</div><div class="station-count" id="st-threat-count">0</div></div>
+      <div class="station" id="station-blocked"><div class="station-icon">🛡️</div><div class="station-label">Blocked</div><div class="station-count" id="st-blocked-count">0</div></div>
+    </div>
+  </div>
+</section>
+
+<!-- ─── Live Traffic Monitor ─── -->
+<section class="pipeline-section">
+  <h2 class="section-title">Live Traffic Monitor</h2>
+  <div class="traffic-monitor">
+    <div class="traffic-stats-bar">
+      <span class="ts-item">Packets: <strong id="tm-packets">0</strong></span>
+      <span class="ts-item">Flows Classified: <strong id="tm-flows">0</strong></span>
+      <span class="ts-item ts-safe">Safe: <strong id="tm-safe">0</strong></span>
+      <span class="ts-item ts-attack">Threats: <strong id="tm-threats">0</strong></span>
+      <span class="ts-item ts-blocked">Blocked: <strong id="tm-blocked">0</strong></span>
+    </div>
+    <div class="traffic-table-wrap">
+      <table class="traffic-table">
+        <thead>
+          <tr>
+            <th>Time</th>
+            <th>Source</th>
+            <th>Destination</th>
+            <th>Proto</th>
+            <th>Size</th>
+            <th>Result</th>
+          </tr>
+        </thead>
+        <tbody id="traffic-tbody"></tbody>
+      </table>
     </div>
   </div>
 </section>
@@ -217,6 +304,17 @@
       </div>
       <div class="card-body" id="blocked-list">
         <div class="empty-state">No IPs blocked yet — attacks with high confidence are blocked automatically</div>
+      </div>
+    </section>
+
+    <!-- Top source IPs -->
+    <section class="card attackers-card">
+      <div class="card-head">
+        <h3>📍 Top Source IPs</h3>
+        <span class="card-sub">where traffic is coming from</span>
+      </div>
+      <div class="card-body" id="attacker-list">
+        <div class="empty-state">No traffic yet — source IPs appear here as flows are classified</div>
       </div>
     </section>
 

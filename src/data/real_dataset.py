@@ -57,6 +57,14 @@ CIC_IDS2017_COLUMN_MAP: dict[str, str] = {
     "active mean":                           "active_mean",
     "idle mean":                             "idle_mean",
     "fwd header length":                     "fwd_header_length",
+    # CICFlowMeter v4 spellings (corrected CIC-IDS2017 / CSE-CIC-IDS2018 by
+    # Liu, Engelen et al., IEEE CNS 2022 — intrusion-detection.distrinet-research.be)
+    "total fwd packet":                      "total_fwd_packets",
+    "total bwd packets":                     "total_bwd_packets",
+    "fwd segment size avg":                  "fwd_segment_size_avg",
+    "bwd segment size avg":                  "bwd_segment_size_avg",
+    "fwd init win bytes":                    "init_win_bytes_fwd",
+    "bwd init win bytes":                    "init_win_bytes_bwd",
     # Alternate spellings seen in some CSV versions
     "fwd header length.1":                   "fwd_header_length",
     "total length of fwd packets":           "fwd_packet_length_mean",
@@ -123,9 +131,18 @@ CIC_IDS2017_LABEL_MAP: dict[str, str] = {
 
     # Botnet
     "bot":                          "Botnet",
+    "botnet":                       "Botnet",
 
     # Infiltration
     "infiltration":                 "Infiltration",
+    # Corrected dataset: port scan launched from the infiltrated host. The
+    # flows ARE port scans, so label by behaviour, not by campaign.
+    "infiltration - portscan":      "PortScan",
+
+    # WebAttack — plain-hyphen spelling used by the corrected dataset
+    "web attack - brute force":     "WebAttack",
+    "web attack - xss":             "WebAttack",
+    "web attack - sql injection":   "WebAttack",
 
     # WebAttack — various encoding variants across CSV versions
     "web attack – brute force":     "WebAttack",
@@ -241,8 +258,18 @@ def _build_column_index(header_row: list[str]) -> dict[str, int]:
 
 
 def _parse_label(raw_label: str) -> Optional[str]:
-    """Map a CIC-IDS2017 label string to a NetSentry class name."""
+    """Map a CIC-IDS2017 label string to a NetSentry class name.
+
+    Returns None (row dropped) for unknown labels and for the corrected
+    dataset's "<attack> - Attempted" flows: attack traffic that never exhibited
+    malicious behaviour (no payload, closed port, tool start-up artefacts).
+    Training on them as attacks teaches the model that any failed connection is
+    hostile; training on them as benign hides real attack shapes. Dropping them
+    keeps both class distributions clean.
+    """
     cleaned = raw_label.strip().lower()
+    if "- attempted" in cleaned:
+        return None
     return CIC_IDS2017_LABEL_MAP.get(cleaned)
 
 
@@ -369,11 +396,15 @@ def balance_classes(
     max_samples_per_class: int = 50_000,
     min_samples_per_class: int = 500,
     synthetic_fill_seed: int = 42,
+    max_benign_samples: Optional[int] = None,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Balance a dataset by undersampling majority classes and oversampling rare ones.
 
     - Classes with more than max_samples_per_class are undersampled.
-    - Classes with fewer than min_samples_per_class are augmented with synthetic data.
+      BENIGN uses max_benign_samples when given (real traffic is mostly benign,
+      so the majority class should stay the majority to keep FPR honest).
+    - Classes with fewer than min_samples_per_class are augmented with synthetic
+      data. min_samples_per_class=0 disables synthetic fill entirely.
     """
     rng = np.random.default_rng(synthetic_fill_seed)
     balanced_X: list[np.ndarray] = []
@@ -382,6 +413,13 @@ def balance_classes(
     for class_id, class_name in enumerate(CLASS_NAMES):
         mask = y == class_id
         class_count = int(mask.sum())
+        class_cap = max_samples_per_class
+        if class_name == "BENIGN" and max_benign_samples is not None:
+            class_cap = max_benign_samples
+
+        if class_count == 0 and min_samples_per_class <= 0:
+            logger.warning("Class '%s' has 0 real samples and synthetic fill is off — skipped", class_name)
+            continue
 
         if class_count == 0:
             # No real samples — fill entirely with synthetic data
@@ -405,12 +443,12 @@ def balance_classes(
 
         class_X = X[mask]
 
-        if class_count > max_samples_per_class:
-            # Undersample: randomly select max_samples_per_class
-            indices = rng.choice(class_count, size=max_samples_per_class, replace=False)
+        if class_count > class_cap:
+            # Undersample: randomly select class_cap rows
+            indices = rng.choice(class_count, size=class_cap, replace=False)
             class_X = class_X[indices]
             logger.info(
-                "Undersampled '%s': %d → %d", class_name, class_count, max_samples_per_class,
+                "Undersampled '%s': %d → %d", class_name, class_count, class_cap,
             )
         elif class_count < min_samples_per_class:
             # Need more samples — augment with synthetic
@@ -470,6 +508,7 @@ def load_real_dataset(
     min_samples_per_class: int = 500,
     deduplicate_rows: bool = True,
     random_state: int = 42,
+    max_benign_samples: Optional[int] = None,
 ) -> tuple[np.ndarray, np.ndarray, list[str], list[str]]:
     """Full pipeline: load CIC-IDS2017 CSVs → clean → deduplicate → balance.
 
@@ -490,6 +529,7 @@ def load_real_dataset(
         max_samples_per_class=max_samples_per_class,
         min_samples_per_class=min_samples_per_class,
         synthetic_fill_seed=random_state,
+        max_benign_samples=max_benign_samples,
     )
 
     # Report class distribution

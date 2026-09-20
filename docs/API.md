@@ -4,9 +4,107 @@ Base URL: `http://<host>:<port>/api/v1`
 
 Interactive OpenAPI docs: `GET /docs`
 
-Auth: when `api.api_key` is configured (YAML or `NETSENTRY_API__API_KEY` env var), every mutating endpoint requires an `X-API-Key` header. When empty, auth is disabled — only safe for private deployments.
+## Authentication
+
+NIDS supports two authentication methods:
+
+1. **JWT (primary)** — when `auth.enabled: true` in config, users authenticate via `POST /auth/login` to obtain a JWT token. Include it in subsequent requests as `Authorization: Bearer <token>`. Tokens expire after the configured `token_expiry_hours` (default 24h).
+
+2. **API key (backward-compatible)** — when `api.api_key` is set, external systems can authenticate with `X-API-Key: <key>`. API-key auth grants the `operator` role.
+
+When `auth.enabled: false` and `api.api_key` is empty, authentication is disabled — only safe for private deployments.
+
+### Roles and permissions
+
+| Role | Can do |
+| ---- | ------ |
+| `admin` | Everything, including user management |
+| `operator` | Submit flows, manage alerts and blocks, view dashboard |
+| `viewer` | View dashboard, alerts, blocked IPs, stats (read-only) |
 
 Rate limiting: fixed-window (default 240 requests / minute per client IP). On excess the API returns `429 Too Many Requests`.
+
+---
+
+## Auth endpoints
+
+### `POST /auth/login`
+
+Public. Authenticate with username and password.
+
+**Request**
+```json
+{
+  "username": "operator",
+  "password": "operator123"
+}
+```
+
+**Response — 200 OK**
+```json
+{
+  "token": "eyJ0eXAiOiJKV1QiLC...",
+  "username": "operator",
+  "role": "operator",
+  "full_name": "Default Operator",
+  "expires_in": 86400
+}
+```
+
+**Errors:** `401` — invalid credentials.
+
+### `GET /auth/me`
+
+Returns the current authenticated user's profile.
+
+**Response — 200 OK**
+```json
+{
+  "username": "operator",
+  "role": "operator",
+  "full_name": "Default Operator"
+}
+```
+
+### `PUT /auth/me/password`
+
+Change your own password. Any authenticated role.
+
+**Request**
+```json
+{
+  "current_password": "old_password",
+  "new_password": "new_password"
+}
+```
+
+### `GET /auth/users` *(admin only)*
+
+List all user accounts. Returns an array of `{username, role, full_name, active}`.
+
+### `POST /auth/users` *(admin only)*
+
+Create a new user.
+
+**Request**
+```json
+{
+  "username": "analyst1",
+  "password": "secure_pass",
+  "role": "viewer",
+  "full_name": "Security Analyst"
+}
+```
+
+**Response — 201 Created**
+
+**Errors:** `409` — username already exists.
+
+### `DELETE /auth/users/{username}` *(admin only)*
+
+Delete a user account. Cannot delete yourself.
+
+**Errors:** `400` — cannot delete self; `404` — user not found.
 
 ---
 
@@ -19,7 +117,7 @@ Liveness check. Always 200 unless the process is crashing.
 ```json
 {
   "status": "ok",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "model_loaded": true
 }
 ```
@@ -210,7 +308,9 @@ All errors are JSON:
 
 Standard status codes:
 
-- `401 Unauthorized` — missing/invalid API key
+- `401 Unauthorized` — missing/invalid JWT token or API key
+- `403 Forbidden` — authenticated but insufficient role for this endpoint
+- `409 Conflict` — resource already exists (e.g., duplicate username)
 - `422 Unprocessable Entity` — Pydantic validation failed
 - `429 Too Many Requests` — rate limiter engaged
 - `500 Internal Server Error` — unhandled exception (logged with full stack)

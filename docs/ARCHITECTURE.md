@@ -25,12 +25,13 @@ A synthetic flow generator is bundled for demos and CI; in production you replac
 | `src/models`   | Train and predict from NumPy arrays                             |    ↔      |
 | `src/training` | Orchestrate data → preprocessor → model → evaluation            |     →     |
 | `src/inference`| Serve predictions from trained artifacts; emit alerts           |     →     |
-| `src/api`      | HTTP transport, auth, rate limit, schemas                       |     ↔     |
+| `src/auth`     | JWT tokens, user store, RBAC, password hashing                  |     ↔     |
+| `src/api`      | HTTP transport, auth integration, rate limit, schemas           |     ↔     |
 | `src/monitoring`| Counters, gauges, histograms in Prometheus text format         |     ↔     |
 | `src/utils`    | Config loading, structured logging, from-scratch metrics        |     ↔     |
 | `src/dashboard`| Read-only operator UI                                           |     ←     |
 
-A strict dependency rule: inner layers (`utils`, `models`, `data`) **never** import from outer layers (`api`, `training`, `inference`). This keeps `src/models/` independently importable for research or notebook work.
+A strict dependency rule: inner layers (`utils`, `models`, `data`) **never** import from outer layers (`api`, `auth`, `training`, `inference`). This keeps `src/models/` independently importable for research or notebook work.
 
 ## Data flow — training
 
@@ -75,7 +76,7 @@ Artifacts written on a successful run:
 POST /api/v1/predict
    │
    ▼
-FastAPI → Pydantic validation → InferenceEngine.predict()
+FastAPI → JWT/API-key auth → RBAC check → Pydantic validation → InferenceEngine.predict()
                                       │
                                       ▼
                          Preprocessor.transform(X)
@@ -127,8 +128,20 @@ Three signals, all emitted by the API process itself:
 2. **Metrics** — Prometheus text exposition at `/api/v1/metrics`. The exporter lives at `src/monitoring/metrics.py`; see `docs/API.md` for the full metric list.
 3. **Alerts** — per-prediction JSON lines appended to `logs/alerts.jsonl` (tail-able, grep-able, shippable to anything).
 
+## Authentication and authorization
+
+The `src/auth` module implements JWT-based authentication and RBAC entirely from scratch using the Python standard library:
+
+- **`JWTHandler`** — creates and verifies tokens using HMAC-SHA256 (`hmac` + `hashlib`). Tokens carry `sub` (username), `role`, `name`, and `exp` claims, base64url-encoded.
+- **`UserStore`** — manages user accounts in a JSON file with thread-safe read/write. Passwords are hashed with PBKDF2-SHA256 (100,000 iterations, 32-byte random salt via `os.urandom`). Atomic writes via tmp-file rename.
+- **`Role` enum** — `admin`, `operator`, `viewer`. The `require_role()` factory returns a FastAPI dependency that rejects requests from insufficient roles with 403.
+- **Backward compatibility** — existing API-key auth (`X-API-Key` header) still works; it grants the `operator` role when JWT auth is also enabled.
+- **Auth disabled mode** — when `auth.enabled: false`, the `get_current_user` dependency returns an anonymous admin user, preserving backward compatibility with tests and development.
+
 ## Security considerations
 
+- JWT tokens signed with HMAC-SHA256; secret injected via environment variable in production (`NETSENTRY_AUTH__JWT_SECRET`).
+- Passwords stored as PBKDF2-SHA256 hashes with 100,000 iterations — never in plain text. User data file excluded from version control via `.gitignore`.
 - API keys validated via constant-time-ish `set` lookup (`src/api/dependencies.py`).
 - Rate limiter is in-process; acceptable for single-node deployments. For horizontal scale, swap the token bucket for Redis — the interface is already isolated.
 - Containers run as UID 1000, read-only root FS, all Linux capabilities dropped.

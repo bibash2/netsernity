@@ -243,3 +243,56 @@ All evaluation numbers in the training report come from this module, not sklearn
 - **ROC AUC (binary)** — build TPR/FPR curve by sorting scores, integrate with trapezoidal rule
 
 Each is validated with handcrafted test cases in `tests/test_data_and_metrics.py`.
+
+
+---
+
+## 8. Training data — corrected CIC-IDS2017
+
+`scripts/download_dataset.py --dataset cicids2017-improved` fetches the re-extracted
+CIC-IDS2017 published with *"Error Prevalence in NIDS datasets: A Case Study on CIC-IDS-2017 and
+CSE-CIC-IDS-2018"* (Liu, Engelen, Lynar, Essam, Joosen — IEEE CNS 2022). Compared with the
+original CSVs it fixes CICFlowMeter bugs (TCP termination, flag counting, duplicated flows) and
+relabels traffic (e.g. the previously unlabelled port scan launched from the infiltrated host).
+
+`src/data/real_dataset.py` maps its CICFlowMeter-v4 column names onto the 30 NetSentry features
+and applies three rules:
+
+| Rule | Why |
+| --- | --- |
+| `<attack> - Attempted` flows are **dropped** | The authors mark flows that were part of an attack but show no malicious behaviour (no payload, closed port, tool start-up). As attacks they teach "any failed connection is hostile"; as benign they hide real attack shapes. |
+| `Infiltration - Portscan` → **PortScan** | Label by behaviour, not campaign — these flows *are* port scans and would otherwise collide with the real PortScan class. |
+| DoS Hulk / GoldenEye / Slowloris / Slowhttptest / Heartbleed → **DDoS** | One denial-of-service family; the sniffer cannot tell one tool from another by flow shape anyway. |
+
+Exact-duplicate rows are removed **before** the stratified split, so no test row has a twin in
+training (PortScan collapses from 230 k raw rows to 7,498 unique ones — scan probes are nearly
+identical). Class caps for the shipped model: BENIGN 150,000 · DDoS 50,000 · everything else
+uncapped (PortScan 7,498 · BruteForce 6,933 · Botnet 736 · WebAttack 104 · Infiltration 36).
+`--min-per-class 0` disables the synthetic generator: **every training row is real traffic.**
+
+### Live feature alignment (`src/capture/sniffer.py`)
+
+The model only generalises to live traffic if the sniffer computes features exactly as
+CICFlowMeter did for the training data (verified against `BasicFlow.java`, `FlowGenerator.java`,
+`Cmd.java` and the corrected CSVs):
+
+| Feature family | CICFlowMeter convention now mirrored |
+| --- | --- |
+| Packet length mean/std/var, segment sizes, Flow Bytes/s | **transport payload bytes** (not frame length) |
+| Fwd Header Length | **transport header only** — TCP data offset ×4, 8 for UDP (no IP header) |
+| Active / Idle | a silence > **5 s** ends an active period *at the last packet before it*; flows without such a gap keep 0 |
+| Flow lifetime | cut **120 s** after the first packet; ends immediately on **RST** or once **both** sides sent FIN |
+| Zero-duration flows | rates emitted as 0 (CICFlowMeter writes `Infinity`, which the loader stores as 0) |
+| Minimum flow size | 2 packets — a probe and its reply is a complete, classifiable flow |
+
+`scripts/live_capture.py` and `scripts/evaluate_model.py --pcap` import this one implementation
+instead of carrying their own copies, so the API server, the CLI capture tool and offline pcap
+evaluation cannot drift apart again. Tests: `tests/test_capture_features.py`.
+
+### Ensemble weights
+
+`scripts/tune_ensemble.py` grid-searches the RF/MLP soft-voting weight on the **validation**
+split (macro-F1, so the rare classes count) and writes the winner into `ensemble.pkl` and
+`config.yaml`. On the corrected data the MLP dragged Infiltration recall from 0.86 to 0.29 at
+the old 0.6/0.4 weights; 0.9/0.1 restores it and lifts test macro-F1 from 0.905 to 0.973.
+
