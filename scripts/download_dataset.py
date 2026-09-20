@@ -3,12 +3,15 @@
 Download real NIDS datasets for training NetSentry.
 
 Supports:
-  - CIC-IDS2017 (recommended, ~2.8M flows, 7 attack categories)
-  - UNSW-NB15 (alternative, ~2.5M flows, 9 attack categories)
+  - CIC-IDS2017 improved (RECOMMENDED): the corrected re-extraction by Liu,
+    Engelen et al. (IEEE CNS 2022) — fixed CICFlowMeter, relabelled flows,
+    "Attempted" attack flows marked. ~2.1M flows, one 343 MB zip.
+  - CIC-IDS2017 original day-wise CSVs (UNB mirrors; often offline)
+  - Synthetic fallback generator
 
 Usage:
+    python -m scripts.download_dataset --dataset cicids2017-improved
     python -m scripts.download_dataset --dataset cicids2017 --output data/cic-ids2017/
-    python -m scripts.download_dataset --dataset unswnb15 --output data/unsw-nb15/
 """
 
 from __future__ import annotations
@@ -55,6 +58,33 @@ CICIDS2017_FILES = {
         "https://iscxdownloads.cs.unb.ca/iscxdownloads/CIC-IDS-2017/PCAPs/Friday-WorkingHours-Afternoon-DDos.pcap_ISCX.csv",
     ],
 }
+
+
+# Corrected CIC-IDS2017 — https://intrusion-detection.distrinet-research.be/CNS2022/
+CICIDS2017_IMPROVED_URL = (
+    "https://intrusion-detection.distrinet-research.be/CNS2022/Datasets/CICIDS2017_improved.zip"
+)
+
+
+def download_cicids2017_improved(output_dir: Path) -> bool:
+    """Download + unzip the corrected CIC-IDS2017 (monday.csv … friday.csv)."""
+    print("=" * 60)
+    print("Downloading CIC-IDS2017 (improved / corrected edition)")
+    print(f"Output: {output_dir}")
+    print("=" * 60)
+    output_dir.mkdir(parents=True, exist_ok=True)
+    if len(list(output_dir.glob("*.csv"))) >= 5:
+        print("  [SKIP] CSVs already present")
+        return True
+    zip_path = output_dir / "CICIDS2017_improved.zip"
+    if not _download_file(CICIDS2017_IMPROVED_URL, zip_path, zip_path.name):
+        return False
+    print("  [UNZIP] ...")
+    with zipfile.ZipFile(zip_path) as zf:
+        zf.extractall(output_dir)
+    zip_path.unlink()
+    print(f"  Extracted: {', '.join(sorted(p.name for p in output_dir.glob('*.csv')))}")
+    return True
 
 
 def _download_file(url: str, dest: Path, label: str = "") -> bool:
@@ -174,8 +204,9 @@ def generate_fallback_dataset(output_dir: Path, n_samples: int = 200_000) -> Non
 def main():
     parser = argparse.ArgumentParser(description="Download NIDS training datasets")
     parser.add_argument(
-        "--dataset", choices=["cicids2017", "synthetic"], default="cicids2017",
-        help="Dataset to download (default: cicids2017)",
+        "--dataset", choices=["cicids2017-improved", "cicids2017", "synthetic"],
+        default="cicids2017-improved",
+        help="Dataset to download (default: cicids2017-improved)",
     )
     parser.add_argument(
         "--output", type=str, default=None,
@@ -196,7 +227,11 @@ def main():
     else:
         output = Path("data") / args.dataset
 
-    if args.dataset == "cicids2017":
+    if args.dataset == "cicids2017-improved":
+        if not download_cicids2017_improved(output):
+            print("\n  Download failed. Manual: https://intrusion-detection.distrinet-research.be/CNS2022/")
+            sys.exit(1)
+    elif args.dataset == "cicids2017":
         ok = download_cicids2017(output)
         if not ok and args.fallback:
             print("\nFalling back to synthetic dataset...")
@@ -205,7 +240,10 @@ def main():
         generate_fallback_dataset(output, args.samples)
 
     print("\nDone. Next steps:")
-    if args.dataset == "cicids2017":
+    if args.dataset == "cicids2017-improved":
+        print(f"  NETSENTRY_MODEL__RF_N_JOBS=8 python -m scripts.train_real_data --dataset-dir {output} \\")
+        print(f"      --max-per-class 50000 --max-benign 150000 --min-per-class 0")
+    elif args.dataset == "cicids2017":
         print(f"  python -m scripts.train_real_data --dataset-dir {output}")
     else:
         print(f"  python -m scripts.train_pipeline --config config/config.yaml")

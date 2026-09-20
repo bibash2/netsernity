@@ -26,7 +26,7 @@ class LoginResponse(BaseModel):
 class CreateUserRequest(BaseModel):
     username: str = Field(..., min_length=3, max_length=32, pattern=r"^[a-zA-Z0-9_]+$")
     password: str = Field(..., min_length=6)
-    role: str = Field(..., pattern=r"^(admin|operator|viewer)$")
+    role: str = Field(..., pattern=r"^(admin|viewer)$")
     full_name: str = ""
 
 

@@ -27,12 +27,9 @@ from __future__ import annotations
 
 import argparse
 import json
-import math
 import sys
 import threading
 import time
-from collections import defaultdict
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
@@ -46,172 +43,85 @@ except ImportError:
     print("ERROR: scapy required. Install: pip install scapy")
     sys.exit(1)
 
-try:
-    import urllib.request
-    import urllib.error
-except ImportError:
-    pass
+import urllib.request
+import urllib.error
+
+
+# ── Authenticated API client ────────────────────────────────────────────────
+
+
+class ApiClient:
+    """Thin NetSentry API client: logs in for a JWT, attaches it to every
+    request, re-logs in on 401, and backs off on 429 (rate limit)."""
+
+    def __init__(self, api_url: str, username: str, password: str,
+                 token: Optional[str] = None):
+        self.api_url = api_url.rstrip("/")
+        self.username = username
+        self.password = password
+        self._token = token
+        self._lock = threading.Lock()
+
+    def _login(self) -> Optional[str]:
+        body = json.dumps({"username": self.username, "password": self.password}).encode()
+        req = urllib.request.Request(
+            f"{self.api_url}/auth/login", data=body,
+            headers={"Content-Type": "application/json"}, method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                # server returns the JWT under "token"
+                return json.loads(resp.read().decode()).get("token")
+        except Exception as e:
+            print(f"\033[91m[AUTH]\033[0m login failed: {e}")
+            return None
+
+    def token(self) -> Optional[str]:
+        with self._lock:
+            if self._token is None:
+                self._token = self._login()
+            return self._token
+
+    def _request(self, method: str, path: str, body: Optional[dict],
+                 retries: int = 5) -> Optional[dict]:
+        data = json.dumps(body).encode() if body is not None else None
+        for attempt in range(retries):
+            tok = self.token()
+            headers = {"Content-Type": "application/json"}
+            if tok:
+                headers["Authorization"] = f"Bearer {tok}"
+            req = urllib.request.Request(f"{self.api_url}{path}", data=data,
+                                         headers=headers, method=method)
+            try:
+                with urllib.request.urlopen(req, timeout=10) as resp:
+                    return json.loads(resp.read().decode())
+            except urllib.error.HTTPError as e:
+                if e.code == 401:  # token expired/invalid — refresh once
+                    with self._lock:
+                        self._token = None
+                    continue
+                if e.code == 429 and attempt < retries - 1:  # rate limited
+                    time.sleep(2 ** attempt)  # 1,2,4,8s backoff
+                    continue
+                print(f"\033[93m[WARN]\033[0m {method} {path} -> HTTP {e.code}")
+                return None
+            except urllib.error.URLError as e:
+                print(f"\033[93m[WARN]\033[0m API unreachable: {e.reason}")
+                return None
+        return None
+
+    def predict(self, features: dict, source_ip: str) -> Optional[dict]:
+        return self._request("POST", "/predict",
+                             {"flow": features, "source_ip": source_ip})
+
+    def get(self, path: str) -> Optional[dict]:
+        return self._request("GET", path, None)
 
 
 # ── Flow accumulator ─────────────────────────────────────────────────────
-
-
-@dataclass
-class FlowAccumulator:
-    """Collects per-packet stats for a single network flow."""
-
-    src_ip: str
-    dst_ip: str
-    src_port: int
-    dst_port: int
-    protocol: int
-
-    start_time: float = 0.0
-    last_time: float = 0.0
-
-    # Packet counts
-    fwd_packets: int = 0
-    bwd_packets: int = 0
-
-    # Packet lengths
-    fwd_lengths: list = field(default_factory=list)
-    bwd_lengths: list = field(default_factory=list)
-    all_lengths: list = field(default_factory=list)
-
-    # Inter-arrival times
-    fwd_iats: list = field(default_factory=list)
-    bwd_iats: list = field(default_factory=list)
-    _last_fwd_time: float = 0.0
-    _last_bwd_time: float = 0.0
-
-    # TCP flags
-    fin_count: int = 0
-    syn_count: int = 0
-    rst_count: int = 0
-    psh_count: int = 0
-    ack_count: int = 0
-    urg_count: int = 0
-
-    # Window sizes (first packet each direction)
-    init_win_fwd: int = -1
-    init_win_bwd: int = -1
-
-    # Header lengths
-    fwd_header_bytes: int = 0
-
-    # Active/idle tracking
-    _active_start: float = 0.0
-    _idle_start: float = 0.0
-    active_times: list = field(default_factory=list)
-    idle_times: list = field(default_factory=list)
-
-    # Activity threshold (microseconds of silence = idle)
-    _idle_threshold: float = 1.0  # 1 second
-
-    def add_packet(self, length: int, is_forward: bool, timestamp: float,
-                   tcp_flags: int = 0, win_size: int = 0, header_len: int = 0):
-        now = timestamp
-
-        if self.start_time == 0:
-            self.start_time = now
-            self._active_start = now
-            self._last_fwd_time = now
-            self._last_bwd_time = now
-
-        # Active/idle detection
-        if self.last_time > 0:
-            gap = now - self.last_time
-            if gap > self._idle_threshold:
-                # Was active, now idle
-                if self._active_start > 0:
-                    self.active_times.append(now - self._active_start)
-                self.idle_times.append(gap)
-                self._active_start = now
-
-        self.last_time = now
-        self.all_lengths.append(length)
-
-        if is_forward:
-            self.fwd_packets += 1
-            self.fwd_lengths.append(length)
-            self.fwd_header_bytes += header_len
-            if self.fwd_packets > 1:
-                self.fwd_iats.append(now - self._last_fwd_time)
-            self._last_fwd_time = now
-            if self.init_win_fwd == -1:
-                self.init_win_fwd = win_size
-        else:
-            self.bwd_packets += 1
-            self.bwd_lengths.append(length)
-            if self.bwd_packets > 1:
-                self.bwd_iats.append(now - self._last_bwd_time)
-            self._last_bwd_time = now
-            if self.init_win_bwd == -1:
-                self.init_win_bwd = win_size
-
-        # TCP flags
-        if tcp_flags:
-            if tcp_flags & 0x01: self.fin_count += 1
-            if tcp_flags & 0x02: self.syn_count += 1
-            if tcp_flags & 0x04: self.rst_count += 1
-            if tcp_flags & 0x08: self.psh_count += 1
-            if tcp_flags & 0x10: self.ack_count += 1
-            if tcp_flags & 0x20: self.urg_count += 1
-
-    def to_features(self) -> dict:
-        """Extract the 30 CIC-IDS features from accumulated packet data."""
-        duration_us = (self.last_time - self.start_time) * 1_000_000  # microseconds
-        duration_s = max(self.last_time - self.start_time, 1e-9)
-        total_packets = self.fwd_packets + self.bwd_packets
-        total_bytes = sum(self.all_lengths)
-
-        def _mean(lst): return sum(lst) / len(lst) if lst else 0.0
-        def _std(lst):
-            if len(lst) < 2: return 0.0
-            m = _mean(lst)
-            return math.sqrt(sum((x - m) ** 2 for x in lst) / len(lst))
-        def _var(lst):
-            s = _std(lst)
-            return s * s
-
-        # Convert IATs to microseconds
-        fwd_iats_us = [t * 1_000_000 for t in self.fwd_iats]
-        bwd_iats_us = [t * 1_000_000 for t in self.bwd_iats]
-
-        down_up = (self.bwd_packets / self.fwd_packets) if self.fwd_packets > 0 else 0.0
-
-        return {
-            "flow_duration": duration_us,
-            "total_fwd_packets": self.fwd_packets,
-            "total_bwd_packets": self.bwd_packets,
-            "fwd_packet_length_mean": _mean(self.fwd_lengths),
-            "bwd_packet_length_mean": _mean(self.bwd_lengths),
-            "flow_bytes_per_sec": total_bytes / duration_s,
-            "flow_packets_per_sec": total_packets / duration_s,
-            "fwd_iat_mean": _mean(fwd_iats_us),
-            "bwd_iat_mean": _mean(bwd_iats_us),
-            "fwd_iat_std": _std(fwd_iats_us),
-            "packet_length_mean": _mean(self.all_lengths),
-            "packet_length_std": _std(self.all_lengths),
-            "packet_length_variance": _var(self.all_lengths),
-            "fin_flag_count": self.fin_count,
-            "syn_flag_count": self.syn_count,
-            "rst_flag_count": self.rst_count,
-            "psh_flag_count": self.psh_count,
-            "ack_flag_count": self.ack_count,
-            "urg_flag_count": self.urg_count,
-            "down_up_ratio": down_up,
-            "avg_packet_size": _mean(self.all_lengths),
-            "fwd_segment_size_avg": _mean(self.fwd_lengths),
-            "bwd_segment_size_avg": _mean(self.bwd_lengths),
-            "subflow_fwd_packets": self.fwd_packets,
-            "subflow_bwd_packets": self.bwd_packets,
-            "init_win_bytes_fwd": self.init_win_fwd,
-            "init_win_bytes_bwd": self.init_win_bwd,
-            "active_mean": _mean([t * 1_000_000 for t in self.active_times]),
-            "idle_mean": _mean([t * 1_000_000 for t in self.idle_times]),
-            "fwd_header_length": self.fwd_header_bytes,
-        }
+# One implementation of the CICFlowMeter feature semantics lives in
+# src/capture/sniffer.py; the API server and this script must agree exactly.
+from src.capture.sniffer import FlowAccumulator, parse_packet, FLOW_TIMEOUT_S  # noqa: E402
 
 
 # ── Flow table ────────────────────────────────────────────────────────────
@@ -225,57 +135,35 @@ class FlowTable:
         self._flows: dict[tuple, FlowAccumulator] = {}
         self._lock = threading.Lock()
 
-    def process_packet(self, pkt):
-        """Called by scapy for each captured packet."""
-        if not pkt.haslayer(IP):
-            return
+    def process_packet(self, pkt) -> Optional[FlowAccumulator]:
+        """Called by scapy for each captured packet.
 
-        ip = pkt[IP]
-        src_ip = ip.src
-        dst_ip = ip.dst
-        proto = ip.proto
-        src_port = 0
-        dst_port = 0
-        tcp_flags = 0
-        win_size = 0
-        header_len = ip.ihl * 4  # IP header length
+        Returns the flow if this packet completed it (RST / both FINs), so the
+        caller can classify it immediately; otherwise None.
+        """
+        rec = parse_packet(pkt)
+        if rec is None:
+            return None
+        (src_ip, dst_ip, src_port, dst_port, proto,
+         payload_len, header_len, tcp_flags, win_size, timestamp) = rec
 
-        if pkt.haslayer(TCP):
-            tcp = pkt[TCP]
-            src_port = tcp.sport
-            dst_port = tcp.dport
-            tcp_flags = int(tcp.flags)
-            win_size = tcp.window
-            header_len += tcp.dataofs * 4 if tcp.dataofs else 20
-        elif pkt.haslayer(UDP):
-            udp = pkt[UDP]
-            src_port = udp.sport
-            dst_port = udp.dport
-            header_len += 8
-
-        length = len(pkt)
-        timestamp = float(pkt.time)
-
-        # Determine flow direction — forward key is always the smaller tuple
         fwd_key = (src_ip, dst_ip, src_port, dst_port, proto)
         bwd_key = (dst_ip, src_ip, dst_port, src_port, proto)
 
         with self._lock:
             if fwd_key in self._flows:
-                self._flows[fwd_key].add_packet(length, True, timestamp,
-                                                 tcp_flags, win_size, header_len)
+                key, flow, is_fwd = fwd_key, self._flows[fwd_key], True
             elif bwd_key in self._flows:
-                self._flows[bwd_key].add_packet(length, False, timestamp,
-                                                 tcp_flags, win_size, header_len)
+                key, flow, is_fwd = bwd_key, self._flows[bwd_key], False
             else:
-                # New flow
-                flow = FlowAccumulator(
-                    src_ip=src_ip, dst_ip=dst_ip,
-                    src_port=src_port, dst_port=dst_port,
-                    protocol=proto,
-                )
-                flow.add_packet(length, True, timestamp, tcp_flags, win_size, header_len)
-                self._flows[fwd_key] = flow
+                key, is_fwd = fwd_key, True
+                flow = FlowAccumulator(src_ip=src_ip, dst_ip=dst_ip,
+                                       src_port=src_port, dst_port=dst_port, protocol=proto)
+                self._flows[key] = flow
+            flow.add_packet(payload_len, is_fwd, timestamp, tcp_flags, win_size, header_len)
+            if flow.closed:
+                return self._flows.pop(key)
+        return None
 
     def flush_expired(self, now: float) -> list[FlowAccumulator]:
         """Remove and return flows that have been idle longer than timeout."""
@@ -283,7 +171,7 @@ class FlowTable:
         with self._lock:
             keys_to_remove = []
             for key, flow in self._flows.items():
-                if (now - flow.last_time) > self.timeout:
+                if (now - flow.last_time) > self.timeout or (now - flow.start_time) > FLOW_TIMEOUT_S:
                     keys_to_remove.append(key)
             for key in keys_to_remove:
                 expired.append(self._flows.pop(key))
@@ -305,79 +193,59 @@ class FlowTable:
 # ── API client ────────────────────────────────────────────────────────────
 
 
-def send_flow_to_api(api_url: str, flow: FlowAccumulator, verbose: bool = False) -> Optional[dict]:
+def send_flow_to_api(client: ApiClient, flow: FlowAccumulator, verbose: bool = False) -> Optional[dict]:
     """POST a flow to the NetSentry predict API. Returns response dict or None."""
-    features = flow.to_features()
-    payload = json.dumps({
-        "flow": features,
-        "source_ip": flow.src_ip,
-    }).encode("utf-8")
-
-    req = urllib.request.Request(
-        f"{api_url}/predict",
-        data=payload,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
-
-    try:
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            body = json.loads(resp.read().decode())
-
-            result = body.get("result", {})
-            prediction = result.get("prediction", "?")
-            confidence = result.get("confidence", 0)
-            is_attack = result.get("is_attack", False)
-            alert_id = body.get("alert_id")
-
-            # Color output
-            if is_attack:
-                severity = "CRITICAL" if confidence > 0.9 else "HIGH" if confidence > 0.7 else "MEDIUM"
-                print(
-                    f"\033[91m[{severity}]\033[0m {flow.src_ip}:{flow.src_port} → "
-                    f"{flow.dst_ip}:{flow.dst_port} | "
-                    f"\033[91m{prediction}\033[0m conf={confidence:.1%} "
-                    f"alert={alert_id or '—'} "
-                    f"pkts={flow.fwd_packets + flow.bwd_packets}"
-                )
-            elif verbose:
-                print(
-                    f"\033[92m[BENIGN]\033[0m  {flow.src_ip}:{flow.src_port} → "
-                    f"{flow.dst_ip}:{flow.dst_port} | "
-                    f"{prediction} conf={confidence:.1%} "
-                    f"pkts={flow.fwd_packets + flow.bwd_packets}"
-                )
-
-            return body
-    except urllib.error.URLError as e:
-        print(f"\033[93m[WARN]\033[0m API unreachable: {e.reason}")
+    body = client.predict(flow.to_features(), flow.src_ip)
+    if body is None:
         return None
-    except Exception as e:
-        print(f"\033[93m[WARN]\033[0m API error: {e}")
-        return None
+
+    result = body.get("result", {})
+    prediction = result.get("prediction", "?")
+    confidence = result.get("confidence", 0)
+    is_attack = result.get("is_attack", False)
+    alert_id = body.get("alert_id")
+
+    if is_attack:
+        severity = "CRITICAL" if confidence > 0.9 else "HIGH" if confidence > 0.7 else "MEDIUM"
+        print(
+            f"\033[91m[{severity}]\033[0m {flow.src_ip}:{flow.src_port} → "
+            f"{flow.dst_ip}:{flow.dst_port} | "
+            f"\033[91m{prediction}\033[0m conf={confidence:.1%} "
+            f"alert={alert_id or '—'} "
+            f"pkts={flow.fwd_packets + flow.bwd_packets}"
+        )
+    elif verbose:
+        print(
+            f"\033[92m[BENIGN]\033[0m  {flow.src_ip}:{flow.src_port} → "
+            f"{flow.dst_ip}:{flow.dst_port} | "
+            f"{prediction} conf={confidence:.1%} "
+            f"pkts={flow.fwd_packets + flow.bwd_packets}"
+        )
+    return body
 
 
 # ── Flush loop ────────────────────────────────────────────────────────────
 
 
-def flush_loop(flow_table: FlowTable, api_url: str, interval: float,
+def classify_flow(flow: FlowAccumulator, client: ApiClient, verbose: bool,
+                  min_packets: int, stats: dict) -> None:
+    """Send one completed flow for classification and update counters."""
+    if flow.fwd_packets + flow.bwd_packets < min_packets:
+        stats["skipped"] += 1
+        return
+    stats["classified"] += 1
+    result = send_flow_to_api(client, flow, verbose=verbose)
+    if result and result.get("result", {}).get("is_attack"):
+        stats["attacks"] += 1
+
+
+def flush_loop(flow_table: FlowTable, client: ApiClient, interval: float,
                verbose: bool, min_packets: int, stats: dict):
     """Background thread: periodically flush expired flows and classify them."""
     while stats.get("running", True):
         time.sleep(interval)
-        now = time.time()
-        expired = flow_table.flush_expired(now)
-
-        for flow in expired:
-            total_pkts = flow.fwd_packets + flow.bwd_packets
-            if total_pkts < min_packets:
-                stats["skipped"] += 1
-                continue
-
-            stats["classified"] += 1
-            result = send_flow_to_api(api_url, flow, verbose=verbose)
-            if result and result.get("result", {}).get("is_attack"):
-                stats["attacks"] += 1
+        for flow in flow_table.flush_expired(time.time()):
+            classify_flow(flow, client, verbose, min_packets, stats)
 
 
 # ── Main ──────────────────────────────────────────────────────────────────
@@ -391,11 +259,17 @@ def parse_args():
                    help="Read from pcap file instead of live capture (no sudo needed)")
     p.add_argument("--api", default="http://localhost:8000/api/v1",
                    help="NetSentry API base URL")
+    p.add_argument("--username", default="admin", help="API login username")
+    p.add_argument("--password", default="admin123", help="API login password")
+    p.add_argument("--token", default=None,
+                   help="Use a pre-issued JWT instead of logging in")
+    p.add_argument("--rate-delay", type=float, default=0.3,
+                   help="Delay between simulated flows (s); keep >0.25 to stay under the API rate limit")
     p.add_argument("--timeout", type=float, default=30.0,
                    help="Flow idle timeout in seconds before classification")
     p.add_argument("--flush-interval", type=float, default=5.0,
                    help="How often to check for expired flows (seconds)")
-    p.add_argument("--min-packets", type=int, default=3,
+    p.add_argument("--min-packets", type=int, default=2,
                    help="Minimum packets in a flow before classifying")
     p.add_argument("--filter", default="ip",
                    help="BPF filter (default: 'ip')")
@@ -444,13 +318,18 @@ def main():
 
     print(f"\n  Capturing... (Ctrl+C to stop)\n")
 
+    client = ApiClient(args.api, args.username, args.password, token=args.token)
+    args_client = client
+    if client.token() is None:
+        print(f"\033[91m  WARNING: could not authenticate to API — predictions will fail.\033[0m")
+
     flow_table = FlowTable(timeout=args.timeout)
     stats = {"running": True, "classified": 0, "attacks": 0, "skipped": 0, "packets": 0}
 
     # Start flush thread
     flusher = threading.Thread(
         target=flush_loop,
-        args=(flow_table, args.api, args.flush_interval, args.verbose, args.min_packets, stats),
+        args=(flow_table, client, args.flush_interval, args.verbose, args.min_packets, stats),
         daemon=True,
     )
     flusher.start()
@@ -458,7 +337,9 @@ def main():
     # Packet counter callback
     def on_packet(pkt):
         stats["packets"] += 1
-        flow_table.process_packet(pkt)
+        closed = flow_table.process_packet(pkt)
+        if closed is not None:  # RST / both FINs seen: classify right away
+            classify_flow(closed, args_client, args.verbose, args.min_packets, stats)
         # Print status every 500 packets
         if stats["packets"] % 500 == 0:
             print(
@@ -490,14 +371,8 @@ def main():
     # Final flush
     print(f"\n\n  Stopping capture, flushing remaining flows...")
     stats["running"] = False
-    remaining = flow_table.flush_all()
-    for flow in remaining:
-        total_pkts = flow.fwd_packets + flow.bwd_packets
-        if total_pkts >= args.min_packets:
-            stats["classified"] += 1
-            result = send_flow_to_api(args.api, flow, verbose=args.verbose)
-            if result and result.get("result", {}).get("is_attack"):
-                stats["attacks"] += 1
+    for flow in flow_table.flush_all():
+        classify_flow(flow, client, args.verbose, args.min_packets, stats)
 
     print(f"\n{'=' * 70}")
     print(f"  CAPTURE SUMMARY")
@@ -533,7 +408,13 @@ def _run_simulation(args):
 
     print(f"\n  Simulating {n_flows} flows from real dataset...\n")
 
+    client = ApiClient(args.api, args.username, args.password, token=args.token)
+    if client.token() is None:
+        print(f"\033[91m  ERROR: could not authenticate to API. Check --username/--password.\033[0m")
+        sys.exit(1)
+
     stats = {"classified": 0, "attacks": 0, "blocked": 0}
+    correct = 0
     fake_ips = {}
 
     for i, idx in enumerate(selected):
@@ -544,59 +425,52 @@ def _run_simulation(args):
         if idx not in fake_ips:
             b2 = (idx // 256) % 256
             b3 = idx % 256
-            b4 = (idx * 7 + 3) % 256
             fake_ips[idx] = f"203.0.{b2}.{b3}" if true_class != "BENIGN" else f"10.0.{b2}.{b3}"
 
         source_ip = fake_ips[idx]
-        payload = json.dumps({"flow": features, "source_ip": source_ip}).encode("utf-8")
+        body = client.predict(features, source_ip)
+        if body is None:
+            print(f"  \033[93m[ERROR]\033[0m Flow {i}: no response")
+            time.sleep(args.rate_delay)
+            continue
 
-        req = urllib.request.Request(
-            f"{args.api}/predict",
-            data=payload,
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
+        result = body.get("result", {})
+        prediction = result.get("prediction", "?")
+        confidence = result.get("confidence", 0)
+        is_attack = result.get("is_attack", False)
+        alert_id = body.get("alert_id")
 
-        try:
-            with urllib.request.urlopen(req, timeout=5) as resp:
-                body = json.loads(resp.read().decode())
-                result = body.get("result", {})
-                prediction = result.get("prediction", "?")
-                confidence = result.get("confidence", 0)
-                is_attack = result.get("is_attack", False)
-                alert_id = body.get("alert_id")
+        stats["classified"] += 1
+        match = prediction == true_class
+        if match:
+            correct += 1
+        marker = "✓" if match else "✗"
 
-                stats["classified"] += 1
-                match = prediction == true_class
-                marker = "✓" if match else "✗"
+        if is_attack:
+            stats["attacks"] += 1
+            severity = "CRITICAL" if confidence > 0.9 else "HIGH" if confidence > 0.7 else "MEDIUM"
+            print(
+                f"  \033[91m[{severity:8s}]\033[0m {source_ip:>15s} → "
+                f"\033[91m{prediction:15s}\033[0m conf={confidence:.1%} "
+                f"true={true_class:15s} {marker} "
+                f"alert={alert_id or '—'}"
+            )
+        elif args.verbose:
+            print(
+                f"  \033[92m[BENIGN  ]\033[0m {source_ip:>15s} → "
+                f"\033[92m{prediction:15s}\033[0m conf={confidence:.1%} "
+                f"true={true_class:15s} {marker}"
+            )
 
-                if is_attack:
-                    stats["attacks"] += 1
-                    severity = "CRITICAL" if confidence > 0.9 else "HIGH" if confidence > 0.7 else "MEDIUM"
-                    print(
-                        f"  \033[91m[{severity:8s}]\033[0m {source_ip:>15s} → "
-                        f"\033[91m{prediction:15s}\033[0m conf={confidence:.1%} "
-                        f"true={true_class:15s} {marker} "
-                        f"alert={alert_id or '—'}"
-                    )
-                elif args.verbose:
-                    print(
-                        f"  \033[92m[BENIGN  ]\033[0m {source_ip:>15s} → "
-                        f"\033[92m{prediction:15s}\033[0m conf={confidence:.1%} "
-                        f"true={true_class:15s} {marker}"
-                    )
-        except Exception as e:
-            print(f"  \033[93m[ERROR]\033[0m Flow {i}: {e}")
+        # Small delay to simulate real-time (and stay under the API rate limit)
+        time.sleep(args.rate_delay)
 
-        # Small delay to simulate real-time
-        time.sleep(0.05)
+    stats["accuracy"] = correct / stats["classified"] if stats["classified"] else 0.0
 
     # Check blocked IPs
     try:
-        req = urllib.request.Request(f"{args.api}/blocked")
-        with urllib.request.urlopen(req, timeout=3) as resp:
-            blocked = json.loads(resp.read().decode())
-            stats["blocked"] = len(blocked)
+        blocked = client.get("/blocked") or []
+        stats["blocked"] = len(blocked)
     except Exception:
         pass
 
@@ -604,6 +478,7 @@ def _run_simulation(args):
     print(f"  SIMULATION SUMMARY")
     print(f"{'=' * 70}")
     print(f"  Flows classified:  {stats['classified']}")
+    print(f"  Accuracy vs label: {stats['accuracy']:.1%}")
     print(f"  Attacks detected:  {stats['attacks']}")
     print(f"  IPs blocked:       {stats['blocked']}")
     print(f"{'=' * 70}\n")
@@ -611,15 +486,12 @@ def _run_simulation(args):
     if stats["blocked"] > 0:
         print(f"  Blocked IPs:")
         try:
-            req = urllib.request.Request(f"{args.api}/blocked")
-            with urllib.request.urlopen(req, timeout=3) as resp:
-                blocked = json.loads(resp.read().decode())
-                for b in blocked[:20]:
-                    print(
-                        f"    \033[91m{b['ip_address']:18s}\033[0m "
-                        f"{b['attack_type']:15s} {b['action_type']:10s} "
-                        f"conf={b['confidence']:.1%} ttl={b['remaining_seconds']}s"
-                    )
+            for b in (client.get("/blocked") or [])[:20]:
+                print(
+                    f"    \033[91m{b['ip_address']:18s}\033[0m "
+                    f"{b['attack_type']:15s} {b['action_type']:10s} "
+                    f"conf={b['confidence']:.1%} ttl={b['remaining_seconds']}s"
+                )
         except Exception:
             pass
         print()

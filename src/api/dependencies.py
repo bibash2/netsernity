@@ -103,7 +103,7 @@ async def get_current_user(
     if x_api_key and _api_key_auth and _api_key_auth.keys:
         try:
             _api_key_auth.verify(x_api_key)
-            return {"sub": "api_key_user", "role": "operator", "name": "API Key"}
+            return {"sub": "api_key_user", "role": "admin", "name": "API Key"}
         except HTTPException:
             pass
 

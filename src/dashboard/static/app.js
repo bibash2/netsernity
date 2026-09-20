@@ -178,6 +178,17 @@ async function apiDelete(path) {
   return r.json();
 }
 
+// ── River animation state (declared early — referenced by renderPipeline & simulate) ──
+const river = {
+  particles: [],
+  newSafe: 0,
+  newAttack: 0,
+  newRaw: 0,
+  total: 0,
+  attacks: 0,
+  blocked: 0,
+};
+
 // ── Clock ──
 function tickClock() {
   document.getElementById("clock").textContent =
@@ -207,6 +218,7 @@ async function poll() {
     renderStats(stats, blocked);
     renderAlerts(alerts);
     renderBlocked(blocked);
+    renderAttackers(alerts, blocked);
     renderPipeline(stats, blocked);
   } catch (e) {
     if (e.message === "Session expired") return;
@@ -325,7 +337,7 @@ function renderBlocked(blocked) {
     return;
   }
 
-  const canUnblock = nsRole === "admin" || nsRole === "operator";
+  const canUnblock = nsRole === "admin";
 
   host.innerHTML = blocked.map(b => {
     const mins = Math.ceil(b.remaining_seconds / 60);
@@ -358,6 +370,41 @@ function renderBlocked(blocked) {
       });
     });
   }
+}
+
+// Aggregate alerts by source IP — a ranked "where attacks come from" list.
+function renderAttackers(alerts, blocked) {
+  const host = document.getElementById("attacker-list");
+  if (!host) return;
+
+  const blockedSet = new Set((blocked || []).map(b => b.ip_address));
+  const byIp = new Map();
+  for (const a of alerts) {
+    const ip = a.source_ip || "unknown";
+    let e = byIp.get(ip);
+    if (!e) { e = { ip, hits: 0, types: {}, maxConf: 0 }; byIp.set(ip, e); }
+    e.hits++;
+    e.types[a.attack_type] = (e.types[a.attack_type] || 0) + 1;
+    if (a.confidence > e.maxConf) e.maxConf = a.confidence;
+  }
+
+  const rows = [...byIp.values()].sort((x, y) => y.hits - x.hits).slice(0, 10);
+  if (!rows.length) {
+    host.innerHTML = '<div class="empty-state">No traffic yet — source IPs appear here as flows are classified</div>';
+    return;
+  }
+
+  host.innerHTML = rows.map(e => {
+    const topType = Object.entries(e.types).sort((a, b) => b[1] - a[1])[0][0];
+    const isBlocked = blockedSet.has(e.ip);
+    return `<div class="attacker-entry">
+      <span class="attacker-ip">${e.ip}</span>
+      <span class="attacker-type">${topType}</span>
+      <span class="attacker-hits">${e.hits} hit${e.hits > 1 ? "s" : ""}</span>
+      <span class="attacker-conf">${(e.maxConf * 100).toFixed(0)}%</span>
+      <span class="attacker-status ${isBlocked ? "blocked" : "seen"}">${isBlocked ? "🛡 blocked" : "seen"}</span>
+    </div>`;
+  }).join("");
 }
 
 // ── Filter buttons ──
@@ -487,7 +534,7 @@ async function pollCapture() {
       statusText.textContent = "Capture Stopped";
       detail.textContent = cs.scapy_available
         ? "Start live capture to monitor real network traffic"
-        : "⚠ scapy not installed — run: pip install scapy";
+        : "Live capture unavailable (optional scapy package not installed)";
       captureBar.classList.remove("active");
     }
   } catch (e) { /* ignore */ }
@@ -509,15 +556,15 @@ function connectWebSocket() {
 
   ws.onmessage = (e) => {
     const event = JSON.parse(e.data);
-    if (event.type === "packets") {
-      river.newRaw += event.count;
+    if (event.type === "packet") {
+      tmPackets++;
+      river.newRaw++;
+      addTrafficRow(event);
     } else if (event.type === "flow") {
-      if (event.is_attack) {
-        river.newAttack += 1;
-      } else {
-        river.newSafe += 1;
-      }
+      tmFlows++;
+      if (event.is_attack) { tmThreats++; river.newAttack++; } else { tmSafe++; river.newSafe++; }
       addLiveFeedEntry(event);
+      updateTrafficStats();
     }
   };
 
@@ -556,113 +603,107 @@ function addLiveFeedEntry(event) {
 
 connectWebSocket();
 
-// ── Animated River ──────────────────────────────────────────────────────
-const canvas = document.getElementById("river-canvas");
-const ctx = canvas.getContext("2d");
+// ── Live Traffic Table ─────────────────────────────────────────────────
+let tmPackets = 0, tmFlows = 0, tmSafe = 0, tmThreats = 0;
+const trafficTbody = document.getElementById("traffic-tbody");
+const MAX_TRAFFIC_ROWS = 500;
 
-// Particle pool
-const particles = [];
-const MAX_PARTICLES = 200;
-
-// River state — only spawns when real traffic arrives
-const river = { total: 0, attacks: 0, blocked: 0, prevTotal: 0, prevAttacks: 0, newSafe: 0, newAttack: 0, newRaw: 0 };
-
-// Station X positions (fractions of canvas width)
-const STATIONS = {
-  inX: 0.08,    // Traffic In
-  aiX: 0.30,    // AI Analysis
-  forkX: 0.52,  // Decision fork
-  safeX: 0.75,  // Safe exit (top)
-  threatX: 0.75, // Threat (bottom)
-  blockX: 0.92,  // Blocked (bottom)
-};
-
-// River Y paths
-const MAIN_Y = 0.35;   // main river line (fraction of height)
-const SAFE_Y = 0.25;   // safe branch goes up
-const THREAT_Y = 0.65;  // threat branch goes down
-const BLOCK_Y = 0.65;
-
-function resizeCanvas() {
-  canvas.width = canvas.offsetWidth * (window.devicePixelRatio || 1);
-  canvas.height = canvas.offsetHeight * (window.devicePixelRatio || 1);
-  ctx.scale(window.devicePixelRatio || 1, window.devicePixelRatio || 1);
+function updateTrafficStats() {
+  const el = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = fmt(v); };
+  el("tm-packets", tmPackets);
+  el("tm-flows", tmFlows);
+  el("tm-safe", tmSafe);
+  el("tm-threats", tmThreats);
 }
-resizeCanvas();
-window.addEventListener("resize", resizeCanvas);
 
-// Particle types: "raw" (unclassified incoming), "safe" (benign), "attack" (threat)
+function addTrafficRow(pkt) {
+  if (!trafficTbody) return;
+  const now = new Date().toLocaleTimeString("en-GB", { hour12: false });
+  const tr = document.createElement("tr");
+  tr.innerHTML =
+    `<td class="tt-time">${now}</td>` +
+    `<td class="tt-addr">${pkt.src_ip}:${pkt.src_port}</td>` +
+    `<td class="tt-addr">${pkt.dst_ip}:${pkt.dst_port}</td>` +
+    `<td class="tt-proto">${pkt.proto}</td>` +
+    `<td class="tt-size">${pkt.size} B</td>` +
+    `<td class="tt-result">-</td>`;
+  trafficTbody.insertBefore(tr, trafficTbody.firstChild);
+  while (trafficTbody.children.length > MAX_TRAFFIC_ROWS) {
+    trafficTbody.removeChild(trafficTbody.lastChild);
+  }
+  if (tmPackets % 50 === 0) updateTrafficStats();
+}
+
+// ── River Animation ────────────────────────────────────────────────────
+const riverCanvas = document.getElementById("river-canvas");
+const riverCtx = riverCanvas ? riverCanvas.getContext("2d") : null;
+
+const MAIN_Y = 0.5;
+const SAFE_Y = 0.28;
+const THREAT_Y = 0.72;
+
 class Particle {
   constructor(type) {
     this.type = type;
+    this.progress = 0;
+    this.speed = 0.003 + Math.random() * 0.004;
+    this.size = 2 + Math.random() * 3;
+    this.opacity = 0.6 + Math.random() * 0.4;
+    this.phase = Math.random() * Math.PI * 2;
     this.x = 0;
     this.y = 0;
-    this.progress = 0;
-    this.speed = type === "raw"
-      ? 0.006 + Math.random() * 0.006
-      : 0.003 + Math.random() * 0.004;
-    this.size = type === "raw" ? 2 + Math.random() * 1.5 : 2.5 + Math.random() * 2;
-    this.opacity = 0.6 + Math.random() * 0.4;
-    this.yOffset = (Math.random() - 0.5) * 20;
-    this.phase = Math.random() * Math.PI * 2;
-    this.alive = true;
+    this.done = false;
   }
 
-  update(w, h) {
+  update() {
     this.progress += this.speed;
+    if (this.progress >= 1) { this.done = true; return; }
 
-    if (this.type === "raw") {
-      if (this.progress > STATIONS.forkX) { this.alive = false; return; }
-      this.x = this.progress * w;
-      const wave = Math.sin(this.phase + this.progress * 10) * 3;
-      this.y = MAIN_Y * h + this.yOffset + wave;
-      if (this.progress < 0.03) this.opacity = this.progress / 0.03;
-      else if (this.progress > STATIONS.forkX - 0.05)
-        this.opacity = (STATIONS.forkX - this.progress) / 0.05;
-      return;
-    }
+    const w = riverCanvas.width;
+    const h = riverCanvas.height;
+    const inX = w * 0.08;
+    const modelX = w * 0.35;
+    const splitX = w * 0.65;
+    const endX = w * 0.92;
+    const mainY = h * MAIN_Y;
+    const safeY = h * SAFE_Y;
+    const threatY = h * THREAT_Y;
+    const wave = Math.sin(this.phase + this.progress * 20) * 4;
 
-    if (this.progress > 1) { this.alive = false; return; }
-
-    const p = this.progress;
-    const wave = Math.sin(this.phase + p * 8) * 4;
-
-    if (p < STATIONS.forkX) {
-      this.x = p * w;
-      this.y = MAIN_Y * h + this.yOffset + wave;
-    } else {
-      const branchP = (p - STATIONS.forkX) / (1 - STATIONS.forkX);
+    if (this.progress < 0.4) {
+      const t = this.progress / 0.4;
+      this.x = inX + (modelX - inX) * t;
+      this.y = mainY + wave;
+    } else if (this.progress < 0.7) {
+      const t = (this.progress - 0.4) / 0.3;
+      this.x = modelX + (splitX - modelX) * t;
       if (this.type === "attack") {
-        const targetY = THREAT_Y * h;
-        const startY = MAIN_Y * h;
-        this.y = startY + (targetY - startY) * Math.min(branchP * 2, 1) + wave * 0.5;
-        this.x = (STATIONS.forkX + branchP * (1 - STATIONS.forkX)) * w;
+        this.y = mainY + (threatY - mainY) * t + wave * 0.7;
       } else {
-        const targetY = SAFE_Y * h;
-        const startY = MAIN_Y * h;
-        this.y = startY + (targetY - startY) * Math.min(branchP * 2, 1) + wave * 0.5;
-        this.x = (STATIONS.forkX + branchP * (1 - STATIONS.forkX)) * w;
+        this.y = mainY + (safeY - mainY) * t + wave * 0.7;
+      }
+    } else {
+      const t = (this.progress - 0.7) / 0.3;
+      this.x = splitX + (endX - splitX) * t;
+      if (this.type === "attack") {
+        this.y = threatY + wave * 0.5;
+      } else {
+        this.y = safeY + wave * 0.5;
+        this.opacity = (0.6 + Math.random() * 0.2) * (1 - t * 0.4);
       }
     }
-
-    if (p < 0.05) this.opacity = p / 0.05;
-    else if (p > 0.9) this.opacity = (1 - p) / 0.1;
   }
 
   draw(ctx) {
-    if (!this.alive) return;
+    if (this.done) return;
     ctx.beginPath();
     ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
-
     if (this.type === "attack") {
       ctx.fillStyle = `rgba(248, 113, 113, ${this.opacity})`;
-      ctx.shadowColor = "rgba(248, 113, 113, 0.6)";
-    } else if (this.type === "safe") {
+      ctx.shadowColor = "rgba(248, 113, 113, 0.4)";
+    } else {
       ctx.fillStyle = `rgba(52, 211, 153, ${this.opacity})`;
       ctx.shadowColor = "rgba(52, 211, 153, 0.4)";
-    } else {
-      ctx.fillStyle = `rgba(96, 165, 250, ${this.opacity * 0.7})`;
-      ctx.shadowColor = "rgba(96, 165, 250, 0.3)";
     }
     ctx.shadowBlur = 6;
     ctx.fill();
@@ -670,89 +711,78 @@ class Particle {
   }
 }
 
-function spawnParticles() {
-  const newRaw = river.newRaw;
-  river.newRaw = 0;
-  for (let i = 0; i < Math.min(newRaw, 10) && particles.length < MAX_PARTICLES; i++) {
-    particles.push(new Particle("raw"));
-  }
-
-  const newSafe = river.newSafe;
-  const newAttack = river.newAttack;
-  river.newSafe = 0;
-  river.newAttack = 0;
-  for (let i = 0; i < newSafe * 3 && particles.length < MAX_PARTICLES; i++) {
-    particles.push(new Particle("safe"));
-  }
-  for (let i = 0; i < newAttack * 3 && particles.length < MAX_PARTICLES; i++) {
-    particles.push(new Particle("attack"));
-  }
+function resizeCanvas() {
+  if (!riverCanvas) return;
+  const rect = riverCanvas.parentElement.getBoundingClientRect();
+  riverCanvas.width = rect.width;
+  riverCanvas.height = rect.height;
 }
 
-function drawRiverPaths(w, h) {
+function spawnParticles() {
+  while (river.newSafe > 0) { river.particles.push(new Particle("safe")); river.newSafe--; }
+  while (river.newAttack > 0) { river.particles.push(new Particle("attack")); river.newAttack--; }
+  while (river.newRaw > 0) { river.particles.push(new Particle("raw")); river.newRaw--; }
+}
+
+function drawRiverPaths(ctx, w, h) {
+  const inX = w * 0.08, modelX = w * 0.35, splitX = w * 0.65, endX = w * 0.92;
+  const mainY = h * MAIN_Y, safeY = h * SAFE_Y, threatY = h * THREAT_Y;
+
+  ctx.lineWidth = 2;
+
+  ctx.strokeStyle = "rgba(52, 211, 153, 0.1)";
   ctx.beginPath();
-  ctx.moveTo(0, MAIN_Y * h);
-  ctx.lineTo(STATIONS.forkX * w, MAIN_Y * h);
-  ctx.strokeStyle = "rgba(52, 211, 153, 0.08)";
-  ctx.lineWidth = 30;
+  ctx.moveTo(inX, mainY);
+  ctx.lineTo(modelX, mainY);
   ctx.stroke();
 
   ctx.beginPath();
-  ctx.moveTo(STATIONS.forkX * w, MAIN_Y * h);
-  ctx.quadraticCurveTo(STATIONS.forkX * w + 60, SAFE_Y * h, w, SAFE_Y * h);
-  ctx.strokeStyle = "rgba(52, 211, 153, 0.06)";
-  ctx.lineWidth = 20;
+  ctx.moveTo(modelX, mainY);
+  ctx.quadraticCurveTo((modelX + splitX) / 2, mainY, splitX, safeY);
+  ctx.lineTo(endX, safeY);
   ctx.stroke();
 
+  ctx.strokeStyle = "rgba(248, 113, 113, 0.1)";
   ctx.beginPath();
-  ctx.moveTo(STATIONS.forkX * w, MAIN_Y * h);
-  ctx.quadraticCurveTo(STATIONS.forkX * w + 60, THREAT_Y * h, w, THREAT_Y * h);
-  ctx.strokeStyle = "rgba(248, 113, 113, 0.06)";
-  ctx.lineWidth = 16;
+  ctx.moveTo(modelX, mainY);
+  ctx.quadraticCurveTo((modelX + splitX) / 2, mainY, splitX, threatY);
+  ctx.lineTo(endX, threatY);
   ctx.stroke();
-
-  ctx.beginPath();
-  ctx.arc(STATIONS.forkX * w, MAIN_Y * h, 6, 0, Math.PI * 2);
-  ctx.fillStyle = "rgba(96, 165, 250, 0.3)";
-  ctx.fill();
-
-  const stationPositions = [
-    { x: STATIONS.inX, y: MAIN_Y },
-    { x: STATIONS.aiX, y: MAIN_Y },
-    { x: STATIONS.safeX, y: SAFE_Y },
-    { x: STATIONS.threatX, y: THREAT_Y },
-    { x: STATIONS.blockX, y: BLOCK_Y },
-  ];
-  for (const s of stationPositions) {
-    ctx.beginPath();
-    ctx.arc(s.x * w, s.y * h, 3, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(148, 163, 184, 0.2)";
-    ctx.fill();
-  }
 }
 
 function animateRiver() {
-  const w = canvas.offsetWidth;
-  const h = canvas.offsetHeight;
+  if (!riverCanvas || !riverCtx) return;
 
-  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const w = riverCanvas.width;
+  const h = riverCanvas.height;
 
-  drawRiverPaths(w, h);
+  riverCtx.clearRect(0, 0, w, h);
+  drawRiverPaths(riverCtx, w, h);
   spawnParticles();
 
-  for (let i = particles.length - 1; i >= 0; i--) {
-    particles[i].update(w, h);
-    if (!particles[i].alive) {
-      particles.splice(i, 1);
-    } else {
-      particles[i].draw(ctx);
-    }
+  for (let i = river.particles.length - 1; i >= 0; i--) {
+    river.particles[i].update();
+    river.particles[i].draw(riverCtx);
+    if (river.particles[i].done) river.particles.splice(i, 1);
   }
+
+  const stIn = document.getElementById("st-in-count");
+  const stModel = document.getElementById("st-model-count");
+  const stSafe = document.getElementById("st-safe-count");
+  const stThreat = document.getElementById("st-threat-count");
+  const stBlocked = document.getElementById("st-blocked-count");
+
+  if (stIn) stIn.textContent = fmt(river.total);
+  if (stModel) stModel.textContent = fmt(river.total);
+  if (stSafe) stSafe.textContent = fmt(river.total - river.attacks);
+  if (stThreat) stThreat.textContent = fmt(river.attacks);
+  if (stBlocked) stBlocked.textContent = fmt(river.blocked);
 
   requestAnimationFrame(animateRiver);
 }
 
-// Start animation
+window.addEventListener("resize", resizeCanvas);
+resizeCanvas();
 animateRiver();
 
 // ── Boot ──

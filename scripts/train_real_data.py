@@ -40,7 +40,10 @@ def main() -> None:
     )
     parser.add_argument("--config", default="config/config.yaml", help="Config file")
     parser.add_argument("--max-per-class", type=int, default=50_000, help="Max samples per class")
-    parser.add_argument("--min-per-class", type=int, default=500, help="Min samples per class")
+    parser.add_argument("--min-per-class", type=int, default=500,
+                        help="Min samples per class (0 = never pad with synthetic data)")
+    parser.add_argument("--max-benign", type=int, default=None,
+                        help="Separate cap for BENIGN (defaults to --max-per-class)")
     parser.add_argument("--no-dedup", action="store_true", help="Skip deduplication")
     parser.add_argument("--quiet", action="store_true", help="Reduce output")
     args = parser.parse_args()
@@ -60,6 +63,7 @@ def main() -> None:
     print(f"Dataset dir:    {args.dataset_dir}")
     print(f"Max per class:  {args.max_per_class:,}")
     print(f"Min per class:  {args.min_per_class:,}")
+    print(f"Max benign:     {args.max_benign or args.max_per_class:,}")
     print(f"Models dir:     {cfg.paths.models_dir}")
     print("=" * 70)
 
@@ -71,6 +75,7 @@ def main() -> None:
         min_samples_per_class=args.min_per_class,
         deduplicate_rows=not args.no_dedup,
         random_state=cfg.data.random_state,
+        max_benign_samples=args.max_benign,
     )
     load_time = time.time() - t0
     print(f"\nDataset loaded in {load_time:.1f}s")

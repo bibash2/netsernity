@@ -44,7 +44,6 @@ class UserStore:
 
     def _seed_defaults(self) -> None:
         self.create_user("admin", "admin123", Role.ADMIN, "Administrator")
-        self.create_user("operator", "operator123", Role.OPERATOR, "Security Operator")
         self.create_user("viewer", "viewer123", Role.VIEWER, "Viewer")
 
     def _save(self) -> None:

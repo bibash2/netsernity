@@ -189,13 +189,15 @@ def create_app(config: Config) -> FastAPI:
             "severity": alert.get("severity") if alert else None,
         })
 
-    def on_raw_packet(src_ip: str, dst_ip: str, count: int):
-        """Called every N packets — pushes to dashboard for river animation."""
+    def on_raw_packet(src_ip: str, dst_ip: str, src_port: int, dst_port: int, proto: str, size: int):
         ws_broadcast_sync({
-            "type": "packets",
+            "type": "packet",
             "src_ip": src_ip,
             "dst_ip": dst_ip,
-            "count": count,
+            "src_port": src_port,
+            "dst_port": dst_port,
+            "proto": proto,
+            "size": size,
         })
 
     sniffer = PacketSniffer(on_flow=on_captured_flow, on_packet_cb=on_raw_packet)
@@ -203,7 +205,7 @@ def create_app(config: Config) -> FastAPI:
     # Register routes under /api/v1
     api_router = build_router(
         engine=engine, alerts=alerts, response_executor=response_executor,
-        version=VERSION, sniffer=sniffer,
+        version=VERSION, sniffer=sniffer, on_broadcast=ws_broadcast_sync,
     )
     app.include_router(api_router, prefix="/api/v1")
 

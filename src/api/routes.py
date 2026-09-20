@@ -43,8 +43,24 @@ def build_router(
     response_executor: ResponseExecutor,
     version: str,
     sniffer: PacketSniffer = None,
+    on_broadcast=None,
 ) -> APIRouter:
     router = APIRouter()
+
+    def _broadcast_flow(result: dict, source_ip, alert):
+        """Push a classified flow to connected dashboards (if a hub is wired)."""
+        if on_broadcast is None:
+            return
+        on_broadcast({
+            "type": "flow",
+            "source_ip": source_ip,
+            "prediction": result.get("prediction", "?"),
+            "is_attack": result.get("is_attack", False),
+            "confidence": result.get("confidence", 0),
+            "anomaly_score": result.get("anomaly_score", 0),
+            "alert_id": alert["alert_id"] if alert else None,
+            "severity": alert.get("severity") if alert else None,
+        })
 
     # ── Public ────────────────────────────────────────────────────────
     @router.get("/health", response_model=HealthResponse, tags=["System"])
@@ -110,7 +126,7 @@ def build_router(
         "/predict",
         response_model=PredictResponse,
         tags=["Detection"],
-        dependencies=[Depends(enforce_rate_limit), Depends(require_role("admin", "operator"))],
+        dependencies=[Depends(enforce_rate_limit), Depends(require_role("admin"))],
     )
     def predict(req: PredictRequest, request: Request) -> PredictResponse:
         req_id = new_request_id()
@@ -125,6 +141,7 @@ def build_router(
         result_dict = raw["results"]
         alert = alerts.record(result_dict, source_ip=req.source_ip)
         alert_id = alert["alert_id"] if alert else None
+        _broadcast_flow(result_dict, req.source_ip, alert)
 
         latency_ms = (time.time() - t0) * 1000
         REGISTRY.observe_histogram("netsentry_prediction_latency_ms", latency_ms, {"route": "predict"})
@@ -152,7 +169,7 @@ def build_router(
         "/predict/batch",
         response_model=BatchPredictResponse,
         tags=["Detection"],
-        dependencies=[Depends(enforce_rate_limit), Depends(require_role("admin", "operator"))],
+        dependencies=[Depends(enforce_rate_limit), Depends(require_role("admin"))],
     )
     def predict_batch(req: BatchPredictRequest, request: Request) -> BatchPredictResponse:
         req_id = new_request_id()
@@ -168,6 +185,7 @@ def build_router(
         alerts_generated = 0
         for r in results:
             alert = alerts.record(r, source_ip=req.source_ip)
+            _broadcast_flow(r, req.source_ip, alert)
             if alert:
                 alerts_generated += 1
                 REGISTRY.inc_counter("netsentry_alerts_total", {"severity": alert["severity"]})
@@ -196,7 +214,7 @@ def build_router(
     @router.delete(
         "/alerts",
         tags=["Alerts"],
-        dependencies=[Depends(require_role("admin", "operator"))],
+        dependencies=[Depends(require_role("admin"))],
     )
     def clear_alerts() -> dict:
         alerts.clear()
@@ -205,7 +223,7 @@ def build_router(
     @router.delete(
         "/blocked/{ip_address}",
         tags=["Enforcement"],
-        dependencies=[Depends(require_role("admin", "operator"))],
+        dependencies=[Depends(require_role("admin"))],
     )
     def unblock_ip(ip_address: str) -> dict:
         if response_executor.unblock(ip_address):
@@ -218,7 +236,7 @@ def build_router(
     @router.delete(
         "/blocked",
         tags=["Enforcement"],
-        dependencies=[Depends(require_role("admin", "operator"))],
+        dependencies=[Depends(require_role("admin"))],
     )
     def flush_all_blocks() -> dict:
         count = response_executor.flush_all()
@@ -227,7 +245,7 @@ def build_router(
     @router.post(
         "/capture/start",
         tags=["Live Capture"],
-        dependencies=[Depends(require_role("admin", "operator"))],
+        dependencies=[Depends(require_role("admin"))],
     )
     def capture_start(interface: Optional[str] = Query(None)) -> dict:
         if sniffer is None:
@@ -244,7 +262,7 @@ def build_router(
     @router.post(
         "/capture/stop",
         tags=["Live Capture"],
-        dependencies=[Depends(require_role("admin", "operator"))],
+        dependencies=[Depends(require_role("admin"))],
     )
     def capture_stop() -> dict:
         if sniffer is None:

@@ -70,7 +70,7 @@ class TestUserStore:
     def test_seeds_default_users(self, store):
         users = store.list_all()
         usernames = {u["username"] for u in users}
-        assert {"admin", "operator", "viewer"} == usernames
+        assert {"admin", "viewer"} == usernames
 
     def test_authenticate_default_admin(self, store):
         user = store.authenticate("admin", "admin123")
@@ -84,11 +84,11 @@ class TestUserStore:
         assert store.authenticate("nobody", "pass") is None
 
     def test_create_and_authenticate(self, store):
-        store.create_user("alice", "alice_pass", Role.OPERATOR, "Alice Operator")
+        store.create_user("alice", "alice_pass", Role.ADMIN, "Alice Admin")
         user = store.authenticate("alice", "alice_pass")
         assert user is not None
-        assert user.role == Role.OPERATOR
-        assert user.full_name == "Alice Operator"
+        assert user.role == Role.ADMIN
+        assert user.full_name == "Alice Admin"
 
     def test_duplicate_user_raises(self, store):
         with pytest.raises(ValueError, match="already exists"):
@@ -100,9 +100,9 @@ class TestUserStore:
         assert store.delete("viewer") is False
 
     def test_update_password(self, store):
-        assert store.update_password("operator", "new_pass") is True
-        assert store.authenticate("operator", "operator123") is None
-        assert store.authenticate("operator", "new_pass") is not None
+        assert store.update_password("viewer", "new_pass") is True
+        assert store.authenticate("viewer", "viewer123") is None
+        assert store.authenticate("viewer", "new_pass") is not None
 
     def test_persistence(self, tmp_path):
         path = str(tmp_path / "users.json")
@@ -210,7 +210,7 @@ class TestRBAC:
         assert r.status_code == 200
 
     @pytestmark_models
-    def test_predict_requires_operator(self, auth_client):
+    def test_predict_requires_admin(self, auth_client):
         viewer_token = _login(auth_client, "viewer", "viewer123")
         r = auth_client.post(
             "/api/v1/predict",
@@ -220,12 +220,12 @@ class TestRBAC:
         assert r.status_code == 403
 
     @pytestmark_models
-    def test_predict_allowed_for_operator(self, auth_client):
-        op_token = _login(auth_client, "operator", "operator123")
+    def test_predict_allowed_for_admin(self, auth_client):
+        admin_token = _login(auth_client)
         r = auth_client.post(
             "/api/v1/predict",
             json={"flow": {"flow_duration": 1000}, "source_ip": "1.2.3.4"},
-            headers={"Authorization": f"Bearer {op_token}"},
+            headers={"Authorization": f"Bearer {admin_token}"},
         )
         assert r.status_code == 200
 
@@ -237,7 +237,7 @@ class TestRBAC:
             headers={"Authorization": f"Bearer {admin_token}"},
         )
         assert r.status_code == 200
-        assert len(r.json()) >= 3
+        assert len(r.json()) >= 2
 
     def test_viewer_cannot_manage_users(self, auth_client):
         viewer_token = _login(auth_client, "viewer", "viewer123")
@@ -245,15 +245,6 @@ class TestRBAC:
         r = auth_client.get(
             "/api/v1/auth/users",
             headers={"Authorization": f"Bearer {viewer_token}"},
-        )
-        assert r.status_code == 403
-
-    def test_operator_cannot_manage_users(self, auth_client):
-        op_token = _login(auth_client, "operator", "operator123")
-
-        r = auth_client.get(
-            "/api/v1/auth/users",
-            headers={"Authorization": f"Bearer {op_token}"},
         )
         assert r.status_code == 403
 
@@ -315,21 +306,21 @@ class TestUserManagement:
         assert r.status_code == 400
 
     def test_change_own_password(self, auth_client):
-        op_token = _login(auth_client, "operator", "operator123")
+        viewer_token = _login(auth_client, "viewer", "viewer123")
 
         r = auth_client.put(
             "/api/v1/auth/me/password",
-            json={"current_password": "operator123", "new_password": "newoper123"},
-            headers={"Authorization": f"Bearer {op_token}"},
+            json={"current_password": "viewer123", "new_password": "newviewer123"},
+            headers={"Authorization": f"Bearer {viewer_token}"},
         )
         assert r.status_code == 200
 
-        new_token = _login(auth_client, "operator", "newoper123")
+        new_token = _login(auth_client, "viewer", "newviewer123")
         assert new_token
 
         auth_client.put(
             "/api/v1/auth/me/password",
-            json={"current_password": "newoper123", "new_password": "operator123"},
+            json={"current_password": "newviewer123", "new_password": "viewer123"},
             headers={"Authorization": f"Bearer {new_token}"},
         )
 

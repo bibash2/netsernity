@@ -39,12 +39,14 @@ data/*.csv
 data/*.npz
 data/*.json
 data/cic-ids2017/
+data/cic-ids2017-improved/
 data/unsw-nb15/
 data/synthetic/
 models_artifacts/*.pkl
 models_artifacts/*.npz
 models_artifacts/reports/*.json
 logs/*.log
+logs/*.log.*
 logs/*.jsonl
 !logs/.gitkeep
 !data/.gitkeep

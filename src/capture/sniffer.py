@@ -28,6 +28,55 @@ try:
 except ImportError:
     SCAPY_AVAILABLE = False
 
+# ── CICFlowMeter conventions ─────────────────────────────────────────────
+# The model is trained on CIC-IDS2017 flows produced by CICFlowMeter, so live
+# features must be computed the same way or the model sees a shifted
+# distribution:
+#   * packet "length" features use TRANSPORT PAYLOAD bytes, not frame length
+#   * "Fwd Header Length" sums TRANSPORT headers only (TCP data offset / 8 for UDP)
+#   * a silence > 5 s splits active/idle periods
+#   * a flow is cut 120 s after its first packet
+#   * a flow ends on RST, or once both sides have sent FIN
+# (verified against CICFlowMeter BasicFlow.java / FlowGenerator.java / Cmd.java)
+ACTIVITY_TIMEOUT_S = 5.0
+FLOW_TIMEOUT_S = 120.0
+
+TCP_FIN, TCP_SYN, TCP_RST = 0x01, 0x02, 0x04
+
+
+def parse_packet(pkt) -> Optional[tuple]:
+    """Reduce a scapy packet to CICFlowMeter-style fields.
+
+    Returns (src_ip, dst_ip, src_port, dst_port, proto, payload_len,
+             header_len, tcp_flags, win_size, timestamp) or None for non-IP.
+    payload_len is derived from the IP total length so Ethernet padding on
+    tiny frames is never counted.
+    """
+    if not pkt.haslayer(IP):
+        return None
+    ip = pkt[IP]
+    ip_hdr = ip.ihl * 4
+    ip_total = ip.len if ip.len is not None else len(ip)
+    src_port = dst_port = 0
+    tcp_flags = win_size = 0
+
+    if pkt.haslayer(TCP):
+        tcp = pkt[TCP]
+        src_port, dst_port = tcp.sport, tcp.dport
+        tcp_flags = int(tcp.flags)
+        win_size = tcp.window
+        header_len = (tcp.dataofs or 5) * 4
+    elif pkt.haslayer(UDP):
+        udp = pkt[UDP]
+        src_port, dst_port = udp.sport, udp.dport
+        header_len = 8
+    else:
+        header_len = 0
+
+    payload_len = max(0, ip_total - ip_hdr - header_len)
+    return (ip.src, ip.dst, src_port, dst_port, int(ip.proto),
+            payload_len, header_len, tcp_flags, win_size, float(pkt.time))
+
 
 # ── Flow accumulator ─────────────────────────────────────────────────────
 
@@ -62,21 +111,33 @@ class FlowAccumulator:
     active_times: list = field(default_factory=list)
     idle_times: list = field(default_factory=list)
     _active_start: float = 0.0
+    last_classified_pkts: int = 0  # packet count at last in-flight classification
+    fwd_fin: bool = False
+    bwd_fin: bool = False
+    rst: bool = False
+
+    @property
+    def closed(self) -> bool:
+        """CICFlowMeter ends a flow on RST or once both directions sent FIN."""
+        return self.rst or (self.fwd_fin and self.bwd_fin)
 
     def add_packet(self, length: int, is_forward: bool, timestamp: float,
                    tcp_flags: int = 0, win_size: int = 0, header_len: int = 0):
+        """`length` = transport payload bytes, `header_len` = transport header bytes."""
         now = timestamp
-        if self.start_time == 0:
+        if self.fwd_packets + self.bwd_packets == 0:
+            # first packet (don't use 0.0 as a sentinel — pcap/test clocks can be 0)
             self.start_time = now
             self._active_start = now
             self._last_fwd_time = now
             self._last_bwd_time = now
-
-        if self.last_time > 0:
+        else:
             gap = now - self.last_time
-            if gap > 1.0:
-                if self._active_start > 0:
-                    self.active_times.append(now - self._active_start)
+            if gap > ACTIVITY_TIMEOUT_S:
+                # CICFlowMeter: the active period ends at the last packet BEFORE
+                # the silence; the silence itself is the idle period. Flows with
+                # no such gap keep active/idle at 0 — matches the training data.
+                self.active_times.append(self.last_time - self._active_start)
                 self.idle_times.append(gap)
                 self._active_start = now
 
@@ -102,18 +163,29 @@ class FlowAccumulator:
                 self.init_win_bwd = win_size
 
         if tcp_flags:
-            if tcp_flags & 0x01: self.fin_count += 1
-            if tcp_flags & 0x02: self.syn_count += 1
-            if tcp_flags & 0x04: self.rst_count += 1
+            if tcp_flags & TCP_FIN:
+                self.fin_count += 1
+                if is_forward:
+                    self.fwd_fin = True
+                else:
+                    self.bwd_fin = True
+            if tcp_flags & TCP_SYN: self.syn_count += 1
+            if tcp_flags & TCP_RST:
+                self.rst_count += 1
+                self.rst = True
             if tcp_flags & 0x08: self.psh_count += 1
             if tcp_flags & 0x10: self.ack_count += 1
             if tcp_flags & 0x20: self.urg_count += 1
 
     def to_features(self) -> dict:
         duration_us = (self.last_time - self.start_time) * 1_000_000
-        duration_s = max(self.last_time - self.start_time, 1e-9)
+        duration_s = self.last_time - self.start_time
         total_pkts = self.fwd_packets + self.bwd_packets
         total_bytes = sum(self.all_lengths)
+        # CICFlowMeter divides by a zero duration -> "Infinity" in the CSV, which
+        # the dataset loader stores as 0. Emit 0 here too so live flows agree.
+        bytes_per_sec = total_bytes / duration_s if duration_s > 0 else 0.0
+        pkts_per_sec = total_pkts / duration_s if duration_s > 0 else 0.0
 
         def _mean(lst): return sum(lst) / len(lst) if lst else 0.0
         def _std(lst):
@@ -130,8 +202,8 @@ class FlowAccumulator:
             "total_bwd_packets": self.bwd_packets,
             "fwd_packet_length_mean": _mean(self.fwd_lengths),
             "bwd_packet_length_mean": _mean(self.bwd_lengths),
-            "flow_bytes_per_sec": total_bytes / duration_s,
-            "flow_packets_per_sec": total_pkts / duration_s,
+            "flow_bytes_per_sec": bytes_per_sec,
+            "flow_packets_per_sec": pkts_per_sec,
             "fwd_iat_mean": _mean(fwd_iats_us),
             "bwd_iat_mean": _mean(bwd_iats_us),
             "fwd_iat_std": _std(fwd_iats_us),
@@ -169,9 +241,10 @@ class PacketSniffer:
         on_packet_cb: Optional[Callable[[str, str, int], None]] = None,
         interface: Optional[str] = None,
         flow_timeout: float = 30.0,
-        flush_interval: float = 5.0,
-        min_packets: int = 3,
+        flush_interval: float = 2.0,
+        min_packets: int = 2,  # a probe + its reply is a complete (and telling) flow
         bpf_filter: str = "ip",
+        active_classify_min_new_packets: int = 20,
     ):
         self._on_flow = on_flow  # callback(features_dict, source_ip)
         self._on_packet_cb = on_packet_cb  # callback(src_ip, dst_ip, length) — every packet
@@ -180,6 +253,9 @@ class PacketSniffer:
         self._flush_interval = flush_interval
         self._min_packets = min_packets
         self._bpf_filter = bpf_filter
+        # Classify long-lived/high-volume flows in-flight (before they expire)
+        # so floods and scans are detected live, not 30s after they stop.
+        self._active_classify_min_new_packets = active_classify_min_new_packets
 
         self._flows: dict[tuple, FlowAccumulator] = {}
         self._flow_lock = threading.Lock()
@@ -187,9 +263,7 @@ class PacketSniffer:
         self._sniff_thread: Optional[threading.Thread] = None
         self._flush_thread: Optional[threading.Thread] = None
 
-        # Packet batch for real-time push (batched every N packets)
-        self._packet_batch_count = 0
-        self._packet_batch_interval = 10  # push every N packets
+        # Every packet pushed individually for real-time visibility
 
         # Stats
         self._packets_captured = 0
@@ -247,51 +321,41 @@ class PacketSniffer:
             }
 
     def _on_packet(self, pkt):
-        if not pkt.haslayer(IP):
+        rec = parse_packet(pkt)
+        if rec is None:
             return
-
-        ip = pkt[IP]
-        src_ip, dst_ip, proto = ip.src, ip.dst, ip.proto
-        src_port = dst_port = 0
-        tcp_flags = win_size = 0
-        header_len = ip.ihl * 4
-
-        if pkt.haslayer(TCP):
-            tcp = pkt[TCP]
-            src_port, dst_port = tcp.sport, tcp.dport
-            tcp_flags = int(tcp.flags)
-            win_size = tcp.window
-            header_len += tcp.dataofs * 4 if tcp.dataofs else 20
-        elif pkt.haslayer(UDP):
-            udp = pkt[UDP]
-            src_port, dst_port = udp.sport, udp.dport
-            header_len += 8
-
-        length = len(pkt)
-        timestamp = float(pkt.time)
+        (src_ip, dst_ip, src_port, dst_port, proto,
+         payload_len, header_len, tcp_flags, win_size, timestamp) = rec
 
         fwd_key = (src_ip, dst_ip, src_port, dst_port, proto)
         bwd_key = (dst_ip, src_ip, dst_port, src_port, proto)
 
+        closed_flow = None
         with self._flow_lock:
             if fwd_key in self._flows:
-                self._flows[fwd_key].add_packet(length, True, timestamp, tcp_flags, win_size, header_len)
+                key, flow, is_fwd = fwd_key, self._flows[fwd_key], True
             elif bwd_key in self._flows:
-                self._flows[bwd_key].add_packet(length, False, timestamp, tcp_flags, win_size, header_len)
+                key, flow, is_fwd = bwd_key, self._flows[bwd_key], False
             else:
+                key, is_fwd = fwd_key, True
                 flow = FlowAccumulator(src_ip=src_ip, dst_ip=dst_ip,
                                         src_port=src_port, dst_port=dst_port, protocol=proto)
-                flow.add_packet(length, True, timestamp, tcp_flags, win_size, header_len)
-                self._flows[fwd_key] = flow
+                self._flows[key] = flow
+            flow.add_packet(payload_len, is_fwd, timestamp, tcp_flags, win_size, header_len)
+            if flow.closed:
+                closed_flow = self._flows.pop(key)
 
         self._packets_captured += 1
 
-        # Push raw packet event in batches
         if self._on_packet_cb:
-            self._packet_batch_count += 1
-            if self._packet_batch_count >= self._packet_batch_interval:
-                self._on_packet_cb(src_ip, dst_ip, self._packet_batch_count)
-                self._packet_batch_count = 0
+            proto_name = "TCP" if proto == 6 else ("UDP" if proto == 17 else "OTHER")
+            self._on_packet_cb(src_ip, dst_ip, src_port, dst_port, proto_name, len(pkt))
+
+        # RST / bidirectional FIN: the flow is complete — classify it now
+        # instead of waiting for the idle timeout (this is how CICFlowMeter
+        # cut the training flows, and it makes scan verdicts near-instant).
+        if closed_flow is not None:
+            self._classify_flow(closed_flow)
 
     def _sniff_loop(self):
         try:
@@ -313,12 +377,18 @@ class PacketSniffer:
         while self._running:
             time.sleep(self._flush_interval)
             self._flush_expired()
+            self._classify_active()
 
     def _flush_expired(self):
+        """Expire idle flows, and cut long-lived ones at FLOW_TIMEOUT_S like CICFlowMeter."""
         now = time.time()
         expired = []
         with self._flow_lock:
-            to_remove = [k for k, f in self._flows.items() if (now - f.last_time) > self._flow_timeout]
+            to_remove = [
+                k for k, f in self._flows.items()
+                if (now - f.last_time) > self._flow_timeout
+                or (now - f.start_time) > FLOW_TIMEOUT_S
+            ]
             for k in to_remove:
                 expired.append(self._flows.pop(k))
 
@@ -331,6 +401,33 @@ class PacketSniffer:
             self._flows.clear()
         for flow in flows:
             self._classify_flow(flow)
+
+    def _classify_active(self):
+        """Classify still-open flows that have grown enough since last time.
+
+        Without this, a sustained flood (one long-lived flow that never goes
+        idle) is only classified after it stops and expires. Snapshotting
+        features under the flow lock avoids racing the sniff thread's list
+        appends. ponytail: builds features under the lock — fine for the small
+        per-flow lists here; revisit if active_flows gets huge.
+        """
+        snapshots = []
+        with self._flow_lock:
+            for flow in self._flows.values():
+                total_pkts = flow.fwd_packets + flow.bwd_packets
+                if total_pkts < self._min_packets:
+                    continue
+                if total_pkts - flow.last_classified_pkts < self._active_classify_min_new_packets:
+                    continue
+                snapshots.append((flow.to_features(), flow.src_ip))
+                flow.last_classified_pkts = total_pkts
+
+        for features, src_ip in snapshots:
+            self._flows_classified += 1
+            try:
+                self._on_flow(features, src_ip)
+            except Exception as e:
+                logger.error("Active flow classification error: %s", e)
 
     def _classify_flow(self, flow: FlowAccumulator):
         total_pkts = flow.fwd_packets + flow.bwd_packets

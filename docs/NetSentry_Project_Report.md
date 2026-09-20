@@ -121,13 +121,9 @@ Finally, we thank our families and friends for their patience and constant motiv
 
 # Abstract
 
-Computer networks face a growing number of automated and continuously evolving attacks, while traditional signature-based defences are unable to recognize new or modified threats. This project, **NIDS**, is a complete, production-style Network Intrusion Detection System with optional Intrusion Prevention capability that classifies network traffic flows as normal or as one of six attack types — Distributed Denial of Service (DDoS), Port Scan, Brute Force, Botnet, Infiltration, and Web Attack — using machine learning.
+Computer networks face a growing number of automated and continuously evolving attacks, while traditional signature-based defences are unable to recognize new or modified threats. This project, **NIDS**, is a complete, production-style Network Intrusion Detection System with optional Intrusion Prevention capability that classifies network traffic flows as normal or as one of six attack types — Distributed Denial of Service (DDoS), Port Scan, Brute Force, Botnet, Infiltration, and Web Attack — using machine learning. All machine-learning models are implemented from first principles using only the NumPy numerical library, with no external framework: a Random Forest and a Multi-Layer Perceptron recognize known attack patterns, while an Isolation Forest detects unusual, never-before-seen behaviour, and an ensemble layer fuses them using a weighted vote with an anomaly-override rule for potential zero-day attacks. Around this detection core the project delivers a full operational system — a data-processing and training pipeline, a real-time inference engine, a REST API, an operator dashboard, structured logging, Prometheus-style monitoring, an alerting subsystem, an optional automated enforcement layer, and a role-based authentication system with JSON Web Token (JWT) security and PBKDF2 password hashing, also implemented from scratch using only the Python standard library. Evaluated on a labelled subset of the real-world CIC-IDS2017 dataset containing 66,721 network flows across seven classes, the ensemble achieved an overall accuracy of about 99.3% and a macro-averaged F1-score of about 98.6%, with an average inference time of roughly half a millisecond per flow, demonstrating that transparent, hand-built models can reach high detection quality while remaining fully auditable and fast enough for real-time use.
 
-The distinguishing feature of NIDS is that all of its machine-learning models are implemented from first principles using only the NumPy numerical library, with no external machine-learning framework. The system combines a Random Forest and a Multi-Layer Perceptron, which recognize known attack patterns, with an Isolation Forest, which detects unusual, never-before-seen behaviour. An ensemble layer fuses these models using a weighted vote and an anomaly-override rule that allows the system to flag potential zero-day attacks. Around this detection core, the project delivers a full operational system: a data-processing and training pipeline, a real-time inference engine, a REST API, an operator dashboard, structured logging, Prometheus-style monitoring, an alerting subsystem, and an optional automated enforcement layer that can block malicious source addresses under safe, configurable conditions. The system is containerized and supplied with deployment configuration for a reverse proxy and a container-orchestration platform.
-
-Evaluated on a labelled subset of the real-world CIC-IDS2017 dataset containing 66,721 network flows described by thirty flow-level features across seven classes, the ensemble model achieved an overall accuracy of about 99.3% and a macro-averaged F1-score of about 98.6%, with an average inference time of roughly half a millisecond per flow. These results show that transparent, hand-built models can reach high detection quality while remaining fully auditable and fast enough for real-time use.
-
-**Keywords:** Network Intrusion Detection, Machine Learning, Random Forest, Neural Network, Isolation Forest, Ensemble Learning, Anomaly Detection, Network Security.
+**Keywords:** Network Intrusion Detection, Machine Learning, Random Forest, Neural Network, Isolation Forest, Ensemble Learning, Anomaly Detection, Network Security, Authentication, Role-Based Access Control.
 
 ```{=openxml}
 <w:p><w:r><w:br w:type="page"/></w:r></w:p>
@@ -156,6 +152,7 @@ Table of Contents
 | CIC-IDS | Canadian Institute for Cybersecurity – Intrusion Detection System (dataset) |
 | CORS | Cross-Origin Resource Sharing |
 | CPU | Central Processing Unit |
+| HMAC | Hash-based Message Authentication Code |
 | CSV | Comma-Separated Values |
 | DDoS | Distributed Denial of Service |
 | F1 | F1-Score (harmonic mean of precision and recall) |
@@ -163,11 +160,14 @@ Table of Contents
 | IDS | Intrusion Detection System |
 | IPS | Intrusion Prevention System |
 | JSON | JavaScript Object Notation |
+| JWT | JSON Web Token |
 | MDI | Mean Decrease in Impurity |
 | ML | Machine Learning |
 | MLP | Multi-Layer Perceptron |
 | NIDS | Network Intrusion Detection System |
 | OOB | Out-Of-Bag |
+| PBKDF2 | Password-Based Key Derivation Function 2 |
+| RBAC | Role-Based Access Control |
 | REST | Representational State Transfer |
 | ReLU | Rectified Linear Unit |
 | ROC | Receiver Operating Characteristic |
@@ -203,6 +203,7 @@ Table of Contents
 | --- | --- |
 | Table 3.1 | Use Case Descriptions |
 | Table 3.2 | Non-Functional Requirements |
+| Table 3.3 | Role-Based Access Control Matrix |
 | Table 4.1 | Tools and Technologies Used |
 | Table 4.2 | Unit Test Cases |
 | Table 4.3 | System / Integration Test Cases |
@@ -223,7 +224,7 @@ A **Network Intrusion Detection System (NIDS)** is a security tool designed for 
 
 This project, **NIDS**, is a complete, production-style Network Intrusion Detection System that classifies network traffic flows into normal traffic and six distinct attack categories using machine learning. What distinguishes NIDS from a typical academic project is that **all of its machine-learning models are implemented from first principles using only the NumPy numerical library** — without relying on ready-made machine-learning frameworks such as scikit-learn, TensorFlow, or PyTorch. The system combines three complementary models: a Random Forest and a Multi-Layer Perceptron (a type of neural network) that recognize known attack patterns, and an Isolation Forest that detects unusual, never-before-seen behaviour. The predictions of these three models are then merged by an ensemble layer to produce a single, reliable decision for each network flow.
 
-Beyond the detection logic, NIDS is built as a full working system rather than a standalone script. It includes a data-processing pipeline, a training pipeline, a real-time inference engine, a REST Application Programming Interface (API) for receiving traffic and returning verdicts, an operator dashboard for security staff, a monitoring and alerting subsystem, and an optional enforcement mode that can automatically block malicious source addresses. The system is also packaged for realistic deployment using containers and orchestration tooling. In this way, NIDS demonstrates not only the design of intrusion-detection algorithms but also the engineering required to operate such a system in a real environment.
+Beyond the detection logic, NIDS is built as a full working system rather than a standalone script. It includes a data-processing pipeline, a training pipeline, a real-time inference engine, a REST Application Programming Interface (API) for receiving traffic and returning verdicts, an operator dashboard for security staff, a monitoring and alerting subsystem, an optional enforcement mode that can automatically block malicious source addresses, and a complete authentication and authorization layer. The authentication system uses JSON Web Tokens (JWT) implemented from scratch with the Python standard library, supports three user roles (Administrator, Security Operator, and External System) with role-based access control, and secures passwords using PBKDF2-SHA256 hashing. The system is also packaged for realistic deployment using containers. In this way, NIDS demonstrates not only the design of intrusion-detection algorithms but also the engineering required to operate such a system in a real environment.
 
 ## 1.2 Problem Statement
 
@@ -255,6 +256,8 @@ The main objectives of the NIDS project are as follows:
 
 5. **To provide monitoring, alerting, and optional automated response**, including severity-based alerts, performance metrics, and an enforcement mode capable of blocking malicious sources under safe, configurable conditions.
 
+6. **To implement authentication and role-based access control from scratch**, using standard-library cryptographic primitives (HMAC-SHA256 for JWT tokens and PBKDF2 for password hashing), so that the security layer is as transparent and auditable as the detection layer.
+
 ## 1.4 Scope and Limitation
 
 ### Scope
@@ -266,7 +269,8 @@ The scope of the NIDS project covers the following:
 - **From-scratch model implementation.** All learning algorithms are written directly using numerical array operations, with no external machine-learning library.
 - **End-to-end system.** The project includes data generation and preprocessing, model training and evaluation, real-time inference, a REST API, an operator dashboard, structured logging, performance metrics, and alerting.
 - **Optional automated enforcement.** An enforcement subsystem can translate high-confidence detections into protective actions (such as rate-limiting or blocking a source address) through a pluggable backend, with safety features such as a dry-run mode and a list of always-allowed networks.
-- **Realistic deployment.** The system is containerized and includes deployment configuration suitable for running behind a reverse proxy and on a container-orchestration platform.
+- **Authentication and role-based access control.** The system includes a complete authentication layer with JWT-based session tokens and three user roles (Administrator, Operator, Viewer), each with appropriate access permissions. The JWT signing and password hashing are implemented from scratch using Python's standard-library `hmac`, `hashlib`, and `os` modules, consistent with the project's transparency philosophy.
+- **Realistic deployment.** The system is containerized and includes deployment configuration suitable for running in a production environment.
 
 ### Limitations
 
@@ -295,7 +299,7 @@ The development proceeded through the following stages:
 
 5. **Integration and evaluation.** Once the models and services were connected, the full system was evaluated end-to-end, measuring classification accuracy, per-class performance, and inference latency.
 
-6. **Deployment preparation.** The system was containerized and supplied with configuration for reverse-proxy, monitoring, and orchestrated deployment, along with a continuous-integration pipeline that automatically lints, tests, and builds the project.
+6. **Deployment preparation.** The system was containerized and supplied with configuration for monitoring, along with a continuous-integration pipeline that automatically lints, tests, and builds the project.
 
 A single configuration file acts as the central source of all tunable settings, and any value can be overridden at deployment time through environment variables. This supports the incremental philosophy by allowing the same code to behave differently in development, testing, and production without modification.
 
@@ -369,7 +373,7 @@ Before any model can learn, raw data must be cleaned and prepared. NIDS's prepro
 
 ### 2.1.10 Supporting System Concepts
 
-To function as a real service, NIDS uses several standard software and operations concepts. A **REST API** is a standard way for other programs to send data to the system and receive results over the web. A **dashboard** provides a visual interface for human operators. **Monitoring metrics** expose numerical indicators of the system's health and performance in a format that monitoring tools can collect and chart. **Containerization** packages the application together with everything it needs to run, so it behaves identically across different machines, and **orchestration** manages running and scaling those containers. These concepts allow the intrusion-detection logic to be operated reliably in a realistic production setting.
+To function as a real service, NIDS uses several standard software and operations concepts. A **REST API** is a standard way for other programs to send data to the system and receive results over the web. A **dashboard** provides a visual interface for human operators. **Monitoring metrics** expose numerical indicators of the system's health and performance in a format that monitoring tools can collect and chart. **Containerization** packages the application together with everything it needs to run, so it behaves identically across different machines. These concepts allow the intrusion-detection logic to be operated reliably in a realistic production setting.
 
 ## 2.2 Literature Review
 
@@ -401,7 +405,7 @@ System analysis identifies what the system must do and how its parts relate to o
 
 #### i. Functional Requirements
 
-The functional requirements describe the services the system provides. NIDS has two main groups of users: the **Security Operator** (a human analyst who monitors threats through the dashboard and manages alerts and blocks) and the **External System / Sensor** (an automated traffic source or another program that submits flows for classification through the API). An **Administrator** role configures and trains the system.
+The functional requirements describe the services the system provides. NIDS has three actor roles: the **Administrator** (who configures the system, trains models, and manages user accounts), the **Security Operator** (a human analyst who monitors threats through the dashboard and manages alerts and blocks), and the **External System / Sensor** (an automated traffic source or another program that submits flows for classification through the API).
 
 The system shall:
 
@@ -415,6 +419,10 @@ The system shall:
 8. Allow an operator to list currently blocked addresses, unblock a specific address, and clear all blocks.
 9. Expose health and readiness endpoints and machine-readable performance metrics.
 10. Train all models from a dataset and produce a stored set of model artifacts and an evaluation report.
+11. Authenticate users via username and password, issuing a JWT token for subsequent requests.
+12. Enforce role-based access control so that detection and enforcement actions require at least the Operator role, while user management and system configuration require the Administrator role.
+13. Allow any authenticated user to change their own password, and allow administrators to create, list, and delete user accounts.
+14. Support backward-compatible API-key authentication for external systems, granting the Operator role.
 
 The following use case diagram summarizes the interactions between the actors and the system.
 
@@ -432,15 +440,18 @@ The main use cases are described in Table 3.1.
 
 | Use Case | Actor | Description |
 | --- | --- | --- |
-| Classify Single Flow | External System | The system receives one flow, preprocesses it, runs the ensemble, and returns a classification with confidence and anomaly information. |
-| Classify Batch of Flows | External System | The system receives many flows at once and classifies them in a single request, returning one result per flow and a count of alerts generated. |
-| View / Filter Alerts | Security Operator | The operator retrieves recent alerts, optionally filtered by severity level, to review detected threats. |
-| Clear Alerts | Security Operator | The operator clears the in-memory alert history (requires authentication). |
-| View Blocked IPs | Security Operator | The operator lists the addresses currently blocked by the enforcement layer, with the reason and expiry time. |
-| Unblock IP / Flush Blocks | Security Operator | The operator removes a specific block or clears all active blocks (requires authentication). |
-| Monitor Dashboard / Metrics | Security Operator | The operator views live statistics, alert summaries, and performance metrics. |
+| Login / Authenticate | All actors | The user submits credentials; the system verifies them and returns a signed JWT token for subsequent requests. External systems may alternatively authenticate via an API key. |
+| Classify Single Flow | External System | The system receives one flow, preprocesses it, runs the ensemble, and returns a classification with confidence and anomaly information. Requires Operator or Admin role. |
+| Classify Batch of Flows | External System | The system receives many flows at once and classifies them in a single request, returning one result per flow and a count of alerts generated. Requires Operator or Admin role. |
+| View / Filter Alerts | Security Operator | The operator retrieves recent alerts, optionally filtered by severity level, to review detected threats. Requires any authenticated role. |
+| Clear Alerts | Security Operator | The operator clears the in-memory alert history. Requires Operator or Admin role. |
+| View Blocked IPs | Security Operator | The operator lists the addresses currently blocked by the enforcement layer, with the reason and expiry time. Requires any authenticated role. |
+| Unblock IP / Flush Blocks | Security Operator | The operator removes a specific block or clears all active blocks. Requires Operator or Admin role. |
+| Monitor Dashboard / Metrics | Security Operator | The operator views live statistics, alert summaries, and performance metrics through the web dashboard. |
+| Change Own Password | Security Operator, Administrator | Any authenticated user changes their own password by providing the current and new passwords. |
 | Train Models | Administrator | The administrator runs the training pipeline, which builds and evaluates all models and stores the artifacts. |
 | Configure / Enable Enforcement | Administrator | The administrator sets configuration values and turns the enforcement (prevention) mode on or off. |
+| Manage Users | Administrator | The administrator creates, lists, and deletes user accounts and assigns roles. Requires the Admin role. |
 
 #### ii. Non-Functional Requirements
 
@@ -454,10 +465,27 @@ The non-functional requirements describe the qualities the system must satisfy, 
 | Scalability | The detection service should run as multiple stateless worker processes that can be scaled horizontally. |
 | Reliability | The system must expose health and readiness checks and fail safely; missing model artifacts must prevent the service from accepting traffic. |
 | Transparency | Every detection decision must be explainable, exposing each model's contribution and the anomaly score. |
-| Security | The API must support key-based authentication, rate limiting, input validation, and a trusted-network allowlist that is never blocked. |
+| Security | The API must support JWT-based authentication with role-based access control, backward-compatible API-key authentication, rate limiting, input validation, secure password storage (PBKDF2-SHA256), and a trusted-network allowlist that is never blocked. |
 | Maintainability | The code must be modular, with inner layers independent of outer layers, and covered by automated tests. |
 | Portability | The system must run identically across environments through containerization and external configuration. |
 | Observability | The system must emit structured logs, numerical metrics, and an alert stream suitable for external monitoring tools. |
+
+#### iii. Role-Based Access Control
+
+The system enforces three user roles with progressively broader permissions, summarized in Table 3.3. This ensures that read-only monitoring is available to all authenticated users, operational actions such as classification and enforcement management require at least the Operator role, and administrative tasks like user management and system configuration are restricted to administrators.
+
+**Table 3.3: Role-Based Access Control Matrix**
+
+| Capability | Viewer | Operator | Admin |
+| --- | :---: | :---: | :---: |
+| View dashboard, alerts, blocked IPs, stats | Yes | Yes | Yes |
+| Change own password | Yes | Yes | Yes |
+| Submit flows for classification | No | Yes | Yes |
+| Clear alerts, unblock IPs, manage enforcement | No | Yes | Yes |
+| Create, list, and delete user accounts | No | No | Yes |
+| Start / stop live packet capture | No | Yes | Yes |
+
+External systems authenticating via an API key are granted the Operator role, which allows them to submit flows for classification and trigger enforcement but not to manage user accounts.
 
 ### 3.1.2 Feasibility Analysis
 
@@ -653,8 +681,6 @@ The tools and technologies used to build NIDS are listed in Table 4.1.
 | Testing | pytest, httpx | Runs unit and integration tests; httpx drives the API test client. |
 | Monitoring | Custom Prometheus exporter | Emits counters, gauges, and histograms in Prometheus text format. |
 | Containerization | Docker, Docker Compose | Packages the application and its monitoring stack. |
-| Orchestration | Kubernetes | Manifests for deployment, autoscaling, ingress, and training jobs. |
-| Reverse Proxy | Nginx | Terminates TLS and applies edge rate limiting. |
 | Enforcement Backend | nftables (Linux firewall) | Applies real IP blocks in prevention mode. |
 | Version Control / CI | Git, GitHub Actions | Source control and an automated lint-test-build pipeline. |
 | Visualization | Grafana | Dashboards built on the exported metrics. |
@@ -671,7 +697,9 @@ It is important to note that no external machine-learning library (such as sciki
 
 **Inference Module.** The `InferenceEngine` loads the saved preprocessor and ensemble once at startup and serves predictions for single flows or batches. It converts incoming feature dictionaries into a numeric matrix, applies the stored preprocessing, runs the ensemble, and returns a JSON-ready result with the prediction, confidence, anomaly score, and per-class probabilities. It also tracks latency percentiles for monitoring. The `AlertManager` turns attack predictions into severity-ranked alerts, stores recent alerts in a fixed-size buffer, and appends them to a log file.
 
-**API Module.** The API layer exposes the system over HTTP. It provides health and readiness checks, a metrics endpoint, single and batch prediction endpoints, alert listing and clearing, and enforcement-management endpoints for listing, removing, and flushing blocks. It applies API-key authentication and rate limiting, validates all inputs, and serves the operator dashboard.
+**Authentication Module.** The authentication layer is implemented entirely from scratch using the Python standard library, consistent with the project's transparency philosophy. The `JWTHandler` creates and verifies JSON Web Tokens using HMAC-SHA256 signing (`hmac` and `hashlib` modules) with base64url-encoded headers and payloads, enforcing configurable token expiry. The `UserStore` manages user accounts in a JSON file with thread-safe read/write operations and atomic file replacement; passwords are hashed using PBKDF2-SHA256 with 100,000 iterations and a random 32-byte salt (`hashlib.pbkdf2_hmac` and `os.urandom`). Three default users (admin, operator, viewer) are seeded on first run. The `Role` enum defines three permission levels — Admin, Operator, and Viewer — and a `require_role()` dependency factory enforces access control on each API endpoint. The module also provides backward-compatible API-key authentication, granting the Operator role to external systems that present a valid key.
+
+**API Module.** The API layer exposes the system over HTTP. It provides health and readiness checks, a metrics endpoint, single and batch prediction endpoints, alert listing and clearing, enforcement-management endpoints for listing, removing, and flushing blocks, and authentication endpoints for login, user profile, password changes, and user management. It integrates JWT-based and API-key authentication, rate limiting, role-based access control, validates all inputs, and serves the operator dashboard with a login page.
 
 **Enforcement Module.** The `ResponseExecutor` evaluates each alert against a response policy that maps every attack type to an action (allow, rate-limit, block, or drop) with a required confidence and a block duration. Before acting, it validates the address format, checks the confidence gate, checks the trusted-network allowlist, avoids duplicate blocks, and respects a maximum-blocks safety cap. Actual blocking is delegated to a pluggable firewall backend, and a dry-run mode allows the policy to be validated without taking real action.
 
@@ -704,6 +732,12 @@ Unit tests verify that each component behaves correctly in isolation. A represen
 | U13 | Metrics | ROC-AUC | AUC is one for a perfect ranker and about a half for random scores |
 | U14 | Enforcement Policy | Every attack type has a policy | All attack classes map to a defined action |
 | U15 | Allowlist | Private and public IPs | Private/trusted IPs are allowed; public IPs are not |
+| U16 | JWT Handler | Create and verify token | Valid token returns correct claims (username, role, expiry) |
+| U17 | JWT Handler | Expired token | Verification returns null; token is rejected |
+| U18 | JWT Handler | Tampered or wrong-secret token | Verification detects tampering and rejects the token |
+| U19 | User Store | Seed default users | Three default users (admin, operator, viewer) are created on first run |
+| U20 | User Store | Authenticate with correct/wrong password | Correct password returns the user; wrong password returns null |
+| U21 | User Store | Create, delete, update password | User CRUD operations succeed and persist across reloads |
 
 ### 4.2.2 Test Cases for System Testing
 
@@ -725,8 +759,18 @@ System tests verify that the components work correctly together through the API 
 | S10 | Block lifecycle | Block then unblock an IP | Block is created and then successfully removed |
 | S11 | Capacity | Exceed the maximum-blocks limit | Further blocks are refused safely |
 | S12 | Traffic simulation | Run a realistic traffic mix | Alerts and statistics reflect the traffic |
+| S13 | Auth login | Login with valid credentials | Returns JWT token with username and role |
+| S14 | Auth login | Login with invalid credentials | Returns 401 Unauthorized |
+| S15 | RBAC | Access protected endpoint without token | Returns 401 Unauthorized |
+| S16 | RBAC | Viewer accesses stats (read-only) | Returns 200 OK |
+| S17 | RBAC | Viewer submits flow for classification | Returns 403 Forbidden |
+| S18 | RBAC | Operator submits flow for classification | Returns 200 OK |
+| S19 | User management | Admin creates, lists, and deletes users | Operations succeed with correct responses |
+| S20 | User management | Non-admin attempts user management | Returns 403 Forbidden |
+| S21 | Password change | User changes own password | Succeeds; old password no longer works |
+| S22 | Public endpoints | Health, ready, metrics without auth | All return 200 without any authentication |
 
-All tests pass in the project's continuous-integration pipeline, which automatically lints the code, runs the full test suite, and builds the container image on every change.
+All 141 tests (105 original plus 36 authentication tests) pass in the project's continuous-integration pipeline, which automatically lints the code, runs the full test suite, and builds the container image on every change.
 
 ## 4.3 Result Analysis
 
@@ -779,9 +823,9 @@ Almost every flow lies on the diagonal, meaning it was classified correctly. The
 
 This project set out to build a complete, transparent, and deployable Network Intrusion Detection System using machine-learning models written entirely from first principles. All of the objectives were met. Four core algorithms — a decision tree, a Random Forest, a Multi-Layer Perceptron, and an Isolation Forest — were implemented using only the NumPy library, and were combined into an ensemble that fuses the strengths of supervised classification with anomaly detection. The ensemble classifies network flows into normal traffic and six attack types with very high accuracy (about 99.3% overall and a macro-averaged F1-score of about 98.6%), while keeping the average prediction time to roughly half a millisecond per flow.
 
-Beyond the models, the project delivered a full operational system rather than an isolated experiment. It includes a data and training pipeline, a real-time inference engine, a REST API, an operator dashboard, structured logging, monitoring metrics, a severity-based alerting subsystem, and an optional enforcement layer that can automatically and safely block malicious sources. The system is containerized and supplied with deployment configuration for a reverse proxy and a container-orchestration platform, and it is covered by an automated test suite and a continuous-integration pipeline.
+Beyond the models, the project delivered a full operational system rather than an isolated experiment. It includes a data and training pipeline, a real-time inference engine, a REST API, an operator dashboard, structured logging, monitoring metrics, a severity-based alerting subsystem, an optional enforcement layer that can automatically and safely block malicious sources, and a complete authentication and authorization system. The authentication layer — including JWT token signing (HMAC-SHA256) and password hashing (PBKDF2-SHA256) — was also implemented from scratch using only the Python standard library, extending the project's transparency philosophy beyond machine learning to security. Three user roles (Administrator, Operator, Viewer) provide role-based access control across all API endpoints, and a login page integrates authentication into the operator dashboard. The system is containerized and covered by an automated test suite of 141 tests and a continuous-integration pipeline.
 
-The most important outcome is the demonstration that hand-built, fully auditable machine-learning models can reach the same high detection quality usually associated with large external libraries, while remaining transparent enough for a security analyst to understand why each decision was made. This combination of accuracy, transparency, and production-readiness is the central contribution of the NIDS project.
+The most important outcome is the demonstration that hand-built, fully auditable implementations — of both machine-learning models and security primitives — can reach the same high quality usually associated with large external libraries, while remaining transparent enough for a security analyst to understand and trust every decision. This combination of accuracy, transparency, and production-readiness is the central contribution of the NIDS project.
 
 ## 5.2 Future Recommendations
 
