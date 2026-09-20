@@ -2,7 +2,7 @@
 # Use `make help` to see everything.
 
 .DEFAULT_GOAL := help
-.PHONY: help install install-dev test unit-test api-test lint format clean train download-data train-real serve predict \
+.PHONY: help install install-dev test unit-test api-test lint format clean train download-data train-real docs serve predict \
         docker-build docker-up docker-down docker-logs k8s-apply k8s-delete
 
 PYTHON  ?= python
@@ -54,6 +54,9 @@ download-data:                          ## Download the corrected CIC-IDS2017 (3
 train-real: download-data               ## Train on real corrected CIC-IDS2017 flows (no synthetic padding)
 	NETSENTRY_MODEL__RF_N_JOBS=$(JOBS) $(PYTHON) -m scripts.train_real_data \
 		--dataset-dir data/cic-ids2017-improved --max-per-class 50000 --max-benign 150000 --min-per-class 0
+
+docs:                                   ## Regenerate report figures and rebuild the Word documents from Markdown (needs pandoc)
+	$(PYTHON) docs/build_docs.py
 
 serve:                                  ## Run the API server  (override: make serve PORT=8080)
 	$(PYTHON) -m scripts.run_server --port $(PORT)

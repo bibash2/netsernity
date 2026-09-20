@@ -78,10 +78,10 @@ Supervisor
 ```
 
 ::: {custom-style="FrontHeading"}
-Certificate of Approval
+Letter of Approval
 :::
 
-This is to certify that this project report prepared by **[Student Name 1]** and **[Student Name 2]**, entitled **"NIDS — A Machine-Learning Based Network Intrusion Detection and Prevention System"**, in partial fulfillment of the requirements for the degree of Bachelor in Computer Application, has been evaluated. In our opinion it is satisfactory in the scope and quality as a project for the required degree.
+This is to certify that this project report prepared by **[Student Name 1]** and **[Student Name 2]**, entitled **"NIDS — A Machine-Learning Based Network Intrusion Detection and Prevention System"**, in partial fulfillment of the requirements for the degree of Bachelor in Computer Application, has been evaluated by the internal and external examiners. In our opinion it is satisfactory in the scope and quality as a project for the required degree.
 
 \
 
@@ -109,11 +109,11 @@ HoD / Coordinator        External Examiner
 
 # Acknowledgement
 
-We would like to express our sincere gratitude to everyone who supported us throughout this project. First, we thank our supervisor, **[Supervisor Name]**, for the continuous guidance, encouragement, and valuable feedback that shaped the direction of this work. We are equally grateful to the Head of Department and the faculty members of the **[Department Name]** for providing the academic foundation and the resources that made this project possible.
+We thank our supervisor, **[Supervisor Name]**, for the guidance and feedback that shaped this project, and the Head and faculty of the **[Department Name]** for the academic foundation and resources that made it possible.
 
-We also acknowledge the authors of the foundational research in machine learning and network security whose work made this project's from-scratch implementations possible, and the open-source community whose tools supported the engineering and deployment of the system.
+We also acknowledge the researchers whose published algorithms and datasets this work builds on — in particular the Canadian Institute for Cybersecurity for the CIC-IDS2017 dataset and the DistriNet group at KU Leuven for its corrected re-extraction — and the open-source community whose tools supported the engineering of the system.
 
-Finally, we thank our families and friends for their patience and constant motivation during the development of NIDS.
+Finally, we thank our families and friends for their patience and encouragement throughout the development of NIDS.
 
 ```{=openxml}
 <w:p><w:r><w:br w:type="page"/></w:r></w:p>
@@ -121,9 +121,11 @@ Finally, we thank our families and friends for their patience and constant motiv
 
 # Abstract
 
-Computer networks face a growing number of automated and continuously evolving attacks, while traditional signature-based defences are unable to recognize new or modified threats. This project, **NIDS**, is a complete, production-style Network Intrusion Detection System with optional Intrusion Prevention capability that classifies network traffic flows as normal or as one of six attack types — Distributed Denial of Service (DDoS), Port Scan, Brute Force, Botnet, Infiltration, and Web Attack — using machine learning. All machine-learning models are implemented from first principles using only the NumPy numerical library, with no external framework: a Random Forest and a Multi-Layer Perceptron recognize known attack patterns, while an Isolation Forest detects unusual, never-before-seen behaviour, and an ensemble layer fuses them using a weighted vote with an anomaly-override rule for potential zero-day attacks. Around this detection core the project delivers a full operational system — a data-processing and training pipeline, a real-time inference engine, a REST API, an operator dashboard, structured logging, Prometheus-style monitoring, an alerting subsystem, an optional automated enforcement layer, and a role-based authentication system with JSON Web Token (JWT) security and PBKDF2 password hashing, also implemented from scratch using only the Python standard library. Evaluated on a labelled subset of the real-world CIC-IDS2017 dataset containing 66,721 network flows across seven classes, the ensemble achieved an overall accuracy of about 99.3% and a macro-averaged F1-score of about 98.6%, with an average inference time of roughly half a millisecond per flow, demonstrating that transparent, hand-built models can reach high detection quality while remaining fully auditable and fast enough for real-time use.
+Signature-based defences cannot recognise attacks they have not seen before, and machine-learning detectors that only exist inside a notebook cannot protect a network. **NIDS** (Network Intrusion Detection System; implemented as the code base *NetSentry*) is a complete intrusion detection system with an optional prevention mode. It captures live packets from a network interface, aggregates them into bidirectional flows described by thirty statistical features, and classifies every flow as benign or as one of six attack types — DDoS, Port Scan, Brute Force, Botnet, Infiltration or Web Attack. Every learning algorithm is implemented from first principles in NumPy: a Random Forest and a Multi-Layer Perceptron recognise known attack patterns, an Isolation Forest flags never-before-seen behaviour, and an ensemble layer fuses them with a weighted vote and an anomaly-override rule. Around the detector the project delivers a REST API, an operator dashboard with a real-time WebSocket feed, severity-ranked alerting, a policy-driven enforcement layer that can rate-limit or block attacking addresses, Prometheus metrics, and a from-scratch JWT authentication layer with two roles.
 
-**Keywords:** Network Intrusion Detection, Machine Learning, Random Forest, Neural Network, Isolation Forest, Ensemble Learning, Anomaly Detection, Network Security, Authentication, Role-Based Access Control.
+The models were trained on the corrected CIC-IDS2017 dataset (Liu, Engelen et al., 2022) using real flows only — 215,307 deduplicated flows after class capping — and evaluated on a stratified held-out split of 43,062 flows. The ensemble reached 99.94 % accuracy, a macro-averaged F1-score of 97.3 %, a false-positive rate of 0.03 % and a detection rate of 99.86 %, at 0.5 ms per flow. Re-scoring the project's earlier model, which had been trained on a 15 % subsample padded with synthetic rows, on the same held-out flows gave 69.1 % accuracy and a 35.8 % false-positive rate; the comparison shows that data provenance, not model complexity, decided detection quality. A further contribution is a live feature extractor that reproduces the CICFlowMeter conventions of the training data exactly, so that the model behaves on captured traffic the way it behaves on the benchmark.
+
+**Keywords:** Network Intrusion Detection, Machine Learning, Random Forest, Neural Network, Isolation Forest, Ensemble Learning, CIC-IDS2017, Live Packet Capture, Intrusion Prevention, Role-Based Access Control.
 
 ```{=openxml}
 <w:p><w:r><w:br w:type="page"/></w:r></w:p>
@@ -145,38 +147,35 @@ Table of Contents
 
 | Abbreviation | Full Form |
 | --- | --- |
-| AI | Artificial Intelligence |
 | API | Application Programming Interface |
-| AUC | Area Under the Curve |
-| CART | Classification and Regression Trees |
-| CIC-IDS | Canadian Institute for Cybersecurity – Intrusion Detection System (dataset) |
-| CORS | Cross-Origin Resource Sharing |
-| CPU | Central Processing Unit |
-| HMAC | Hash-based Message Authentication Code |
+| AUC | Area Under the (ROC) Curve |
+| CIC-IDS2017 | Canadian Institute for Cybersecurity – Intrusion Detection System dataset, 2017 |
+| CIDR | Classless Inter-Domain Routing (network prefix notation) |
 | CSV | Comma-Separated Values |
 | DDoS | Distributed Denial of Service |
+| DR | Detection Rate (share of attack flows flagged as attacks) |
 | F1 | F1-Score (harmonic mean of precision and recall) |
-| HTTP | Hypertext Transfer Protocol |
-| IDS | Intrusion Detection System |
-| IPS | Intrusion Prevention System |
+| FIN / SYN / RST / ACK / PSH / URG | TCP control flags |
+| FPR | False-Positive Rate (share of benign flows flagged as attacks) |
+| HMAC | Hash-based Message Authentication Code |
+| HTTP / HTTPS | Hypertext Transfer Protocol (Secure) |
+| IAT | Inter-Arrival Time between packets |
+| IDS / IPS | Intrusion Detection / Prevention System |
 | JSON | JavaScript Object Notation |
 | JWT | JSON Web Token |
-| MDI | Mean Decrease in Impurity |
-| ML | Machine Learning |
 | MLP | Multi-Layer Perceptron |
-| NIDS | Network Intrusion Detection System |
-| OOB | Out-Of-Bag |
+| NIC | Network Interface Card |
+| OOB | Out-Of-Bag (Random Forest validation estimate) |
 | PBKDF2 | Password-Based Key Derivation Function 2 |
 | RBAC | Role-Based Access Control |
 | REST | Representational State Transfer |
-| ReLU | Rectified Linear Unit |
 | ROC | Receiver Operating Characteristic |
-| SLA | Service Level Agreement |
 | SOC | Security Operations Centre |
-| SOAR | Security Orchestration, Automation and Response |
-| TCP | Transmission Control Protocol |
+| TCP / UDP | Transmission Control / User Datagram Protocol |
 | TLS | Transport Layer Security |
+| TTL | Time To Live (duration of a block) |
 | UML | Unified Modeling Language |
+| WS / WSS | WebSocket (Secure) |
 
 ```{=openxml}
 <w:p><w:r><w:br w:type="page"/></w:r></w:p>
@@ -187,28 +186,38 @@ Table of Contents
 | Figure | Title |
 | --- | --- |
 | Figure 3.1 | Use Case Diagram of NIDS |
-| Figure 3.2 | Class Diagram of the Core Modules |
-| Figure 3.3 | Object Diagram of a Detection Scenario |
-| Figure 3.4 | State Diagram of an IP Block Lifecycle |
-| Figure 3.5 | Sequence Diagram of a Prediction Request |
-| Figure 3.6 | Activity Diagram of Detection and Enforcement |
-| Figure 3.7 | Overall System Architecture of NIDS |
-| Figure 3.8 | Component Diagram of NIDS |
-| Figure 3.9 | Deployment Diagram of NIDS |
-| Figure 4.1 | Ensemble Confusion Matrix (Test Set) |
+| Figure 3.2 | Gantt Chart of the Project Schedule |
+| Figure 3.3 | Class Diagram of the Core Modules |
+| Figure 3.4 | Object Diagram of a Detection Scenario |
+| Figure 3.5 | State Diagram of a Source Address under Enforcement |
+| Figure 3.6 | Sequence Diagram of a Prediction Request |
+| Figure 3.7 | Activity Diagram of Detection and Enforcement |
+| Figure 3.8 | Overall System Architecture of NIDS |
+| Figure 3.9 | Component Diagram of NIDS |
+| Figure 3.10 | Deployment Diagram of NIDS |
+| Figure 4.1 | Ensemble Confusion Matrix on the Held-Out Test Split |
+| Figure 4.2 | Per-Class Recall of the Previous and the Retrained Model |
+| Figure B.1 | Login Page of the Operator Dashboard |
+| Figure B.2 | Operator Dashboard — Pipeline Counters and Live Traffic Monitor |
+| Figure B.3 | Operator Dashboard — Threat Breakdown, Blocked IPs and Top Source IPs |
+| Figure B.4 | Interactive API Documentation |
 
 # List of Tables
 
 | Table | Title |
 | --- | --- |
 | Table 3.1 | Use Case Descriptions |
-| Table 3.2 | Non-Functional Requirements |
-| Table 3.3 | Role-Based Access Control Matrix |
+| Table 3.2 | Enforcement Policy per Attack Class |
+| Table 3.3 | Non-Functional Requirements |
+| Table 3.4 | Role-Based Access Control Matrix |
+| Table 3.5 | Live Feature Extraction Rules Mirrored from CICFlowMeter |
 | Table 4.1 | Tools and Technologies Used |
 | Table 4.2 | Unit Test Cases |
 | Table 4.3 | System / Integration Test Cases |
-| Table 4.4 | Overall Model Performance on the Test Set |
-| Table 4.5 | Per-Class Performance of the Ensemble Model |
+| Table 4.4 | Composition of the Training Data |
+| Table 4.5 | Overall Model Performance on the Test Split |
+| Table 4.6 | Per-Class Performance of the Ensemble Model |
+| Table 4.7 | Previous versus Retrained Model on Identical Held-Out Flows |
 
 ```{=openxml}
 <w:p><w:pPr><w:sectPr><w:footerReference w:type="default" r:id="rIdftr1"/><w:type w:val="nextPage"/><w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1440" w:right="1440" w:bottom="1440" w:left="1800" w:header="720" w:footer="720" w:gutter="0"/><w:pgNumType w:fmt="lowerRoman" w:start="1"/><w:cols w:space="720"/><w:docGrid w:linePitch="360"/></w:sectPr></w:pPr></w:p>
@@ -218,103 +227,51 @@ Table of Contents
 
 ## 1.1 Introduction
 
-Modern organizations depend on computer networks to carry almost every part of their daily operations, from internal communication and file sharing to customer-facing services and financial transactions. As this dependence has grown, networks have also become one of the most attractive targets for attackers. Threats such as distributed denial-of-service (DDoS) floods, port scanning, password brute-forcing, botnet activity, host infiltration, and web-application attacks are now common, automated, and continuously evolving. A single successful intrusion can lead to service downtime, data theft, financial loss, and lasting damage to an organization's reputation. Protecting a network therefore requires more than a firewall at the perimeter; it requires the ability to continuously observe traffic, recognize malicious behaviour, and respond before serious harm is done.
+Organisations run on their networks, and their networks are under constant, automated attack: denial-of-service floods, port scans, password guessing, botnet traffic, infiltration and web-application attacks arrive around the clock and change faster than hand-written rules can follow. Protecting a network therefore needs more than a perimeter firewall — it needs a system that watches traffic continuously, recognises malicious behaviour, and can react before damage is done.
 
-A **Network Intrusion Detection System (NIDS)** is a security tool designed for exactly this purpose. It inspects network activity, decides whether each unit of traffic is normal or malicious, and raises an alert when it detects a likely attack. Traditional intrusion detection systems rely heavily on *signatures* — fixed rules that describe known attacks. While signature-based systems are accurate against threats they already know, they are unable to recognize new or slightly modified attacks for which no rule has been written yet. To overcome this weakness, the security industry has increasingly turned to **machine learning**, which allows a system to *learn* the statistical patterns that separate benign traffic from attacks, and to generalize to variations it has not seen before.
+A **Network Intrusion Detection System (NIDS)** does exactly that. Classical systems match traffic against *signatures* of known attacks; they are precise for what they know and blind to everything else. Machine learning offers a way out: a model can learn the statistical shape of benign and malicious traffic from labelled examples and generalise to variations it has never seen.
 
-This project, **NIDS**, is a complete, production-style Network Intrusion Detection System that classifies network traffic flows into normal traffic and six distinct attack categories using machine learning. What distinguishes NIDS from a typical academic project is that **all of its machine-learning models are implemented from first principles using only the NumPy numerical library** — without relying on ready-made machine-learning frameworks such as scikit-learn, TensorFlow, or PyTorch. The system combines three complementary models: a Random Forest and a Multi-Layer Perceptron (a type of neural network) that recognize known attack patterns, and an Isolation Forest that detects unusual, never-before-seen behaviour. The predictions of these three models are then merged by an ensemble layer to produce a single, reliable decision for each network flow.
+This project, **NIDS** — a Network Intrusion Detection System, implemented as the *NetSentry* code base — is a complete machine-learning intrusion detection and prevention system, and it differs from a typical academic detector in three ways. First, every model is written from first principles: the decision tree, Random Forest, Multi-Layer Perceptron and Isolation Forest are implemented in NumPy alone, without scikit-learn, TensorFlow or PyTorch, so every step of every decision can be read and audited. Second, it works on live traffic end to end: a packet-capture module turns raw packets into flows whose thirty features are computed exactly as the training dataset computed them, flows are classified within seconds and shown on a dashboard in real time, and, when enforcement is enabled, the attacking address is rate-limited or blocked. Third, it is evaluated honestly on real data: the models are trained on the corrected CIC-IDS2017 benchmark using real flows only, and the report documents what happened when an earlier, synthetically padded model was scored on the same held-out traffic.
 
-Beyond the detection logic, NIDS is built as a full working system rather than a standalone script. It includes a data-processing pipeline, a training pipeline, a real-time inference engine, a REST Application Programming Interface (API) for receiving traffic and returning verdicts, an operator dashboard for security staff, a monitoring and alerting subsystem, an optional enforcement mode that can automatically block malicious source addresses, and a complete authentication and authorization layer. The authentication system uses JSON Web Tokens (JWT) implemented from scratch with the Python standard library, supports three user roles (Administrator, Security Operator, and External System) with role-based access control, and secures passwords using PBKDF2-SHA256 hashing. The system is also packaged for realistic deployment using containers. In this way, NIDS demonstrates not only the design of intrusion-detection algorithms but also the engineering required to operate such a system in a real environment.
+Around the detector the project delivers a complete operational system: a REST API for single and batch classification, alerts, blocks and capture control; an operator dashboard fed over WebSocket with every packet and every verdict; severity-ranked alerting with a recommended action per attack class; a policy-driven enforcement layer with a confidence gate, allowlist, duplicate check and capacity cap; Prometheus-format metrics and structured JSON logs; a from-scratch JWT authentication layer with two roles (Administrator and Viewer) and PBKDF2 password storage; and container images, Kubernetes manifests and a suite of 150 automated tests.
 
 ## 1.2 Problem Statement
 
-Network attacks today are frequent, automated, and constantly changing, while the volume of traffic that must be examined is enormous. This creates several specific problems that existing approaches struggle to solve together:
+Network attacks today are frequent, automated and constantly changing, and existing approaches struggle with several problems at once. Signature-based tools miss new attacks, because any variation that does not match a stored rule passes undetected. Manual monitoring does not scale: even a small network produces far more flows than an analyst can inspect. Machine-learning detectors are usually black boxes that depend on large libraries whose internals the developer cannot audit — a serious weakness when an analyst must justify why an address was blocked. A model in a notebook is not a security system; detection must run continuously on live traffic, respond within milliseconds, raise actionable alerts and expose its health to monitoring. Finally, benchmark results often do not transfer: attack classes are rare and dissimilar — a DDoS flood looks nothing like a quiet infiltration — and models trained on small or synthetic samples report high accuracy while failing on real flows.
 
-- **Signature-based systems cannot detect new attacks.** Rule-based detection tools only recognize threats that exactly match a previously written signature. Attackers routinely modify their methods, and entirely new ("zero-day") attacks appear regularly. Any small change can allow an attack to slip past a purely signature-based defence.
-
-- **Manual monitoring does not scale.** The amount of traffic on even a modest network is far too large for human analysts to inspect directly. Without automated classification, genuine attacks are easily lost in the noise of normal activity.
-
-- **Machine-learning solutions are often treated as black boxes.** Many machine-learning intrusion detectors depend on large external libraries whose internal behaviour is hidden from the developer. In a security context this is a serious weakness: analysts need to understand *why* a flow was flagged, and developers need to be able to audit and trust every step of the computation.
-
-- **Detection alone is not enough.** A model that produces an accuracy figure in a notebook is not a usable security system. To be effective, a detector must run continuously, accept live traffic, respond within milliseconds, raise meaningful alerts, expose its health to monitoring tools, and ideally take protective action automatically.
-
-- **Class imbalance and varied attack behaviour make accurate classification difficult.** Normal traffic vastly outnumbers attacks, and different attacks (for example, a high-volume DDoS flood versus a quiet infiltration attempt) have very different statistical fingerprints. A single model often handles some of these well and others poorly.
-
-The core problem this project addresses is therefore: **how to build a network intrusion detection system that can accurately distinguish normal traffic from multiple types of attacks, can detect unknown attacks as well as known ones, remains fully transparent and auditable in its decision-making, and operates as a complete, deployable real-time service rather than an isolated experiment.**
+The problem this project addresses is therefore: **how to build a network intrusion detection system that classifies live traffic into benign and multiple attack types, detects unknown as well as known attacks, is transparent enough to audit every decision, is evaluated on real traffic, and operates as a deployable real-time service with optional automated response.**
 
 ## 1.3 Objectives
 
-The main objectives of the NIDS project are as follows:
+The objectives of the project are:
 
-1. **To design and implement core machine-learning models from scratch** — a decision tree, a Random Forest, a Multi-Layer Perceptron, and an Isolation Forest — using only basic numerical operations, so that the entire detection logic is transparent and auditable.
+1. **To implement the core machine-learning models from first principles** — a decision tree, a Random Forest, a Multi-Layer Perceptron and an Isolation Forest, written in NumPy alone — and to combine them into an ensemble that classifies network flows into benign traffic and six attack classes (DDoS, Port Scan, Brute Force, Botnet, Infiltration and Web Attack) from thirty flow-level features.
 
-2. **To build an ensemble classifier** that combines the strengths of supervised models (for recognizing known attacks) and an anomaly-detection model (for surfacing unknown or zero-day behaviour) into a single reliable decision per network flow.
+2. **To build a complete real-time detection and prevention service** around the models: live packet capture with feature extraction identical to the training dataset, a REST API, a WebSocket-driven operator dashboard, severity-ranked alerting, policy-driven enforcement with safety controls, and role-based authentication implemented from the Python standard library.
 
-3. **To accurately classify network traffic** into normal traffic and six attack categories — DDoS, Port Scan, Brute Force, Botnet, Infiltration, and Web Attack — using a realistic, flow-level feature set.
-
-4. **To develop a complete real-time detection service**, including a data-processing pipeline, a training pipeline, an inference engine, a REST API, and an operator dashboard, so the models can be used in practice and not only in testing.
-
-5. **To provide monitoring, alerting, and optional automated response**, including severity-based alerts, performance metrics, and an enforcement mode capable of blocking malicious sources under safe, configurable conditions.
-
-6. **To implement authentication and role-based access control from scratch**, using standard-library cryptographic primitives (HMAC-SHA256 for JWT tokens and PBKDF2 for password hashing), so that the security layer is as transparent and auditable as the detection layer.
+3. **To evaluate the system honestly on real traffic** — training and testing on the corrected CIC-IDS2017 dataset without synthetic data, and reporting per-class results, the false-positive rate and the effect of training-data quality on detection performance.
 
 ## 1.4 Scope and Limitation
 
 ### Scope
 
-The scope of the NIDS project covers the following:
+The system works at the level of network flows: each conversation between two endpoints is summarised by thirty numerical features — durations, packet and byte rates, inter-arrival times, packet-length statistics, TCP flag counts, window sizes and active/idle periods — the feature family of the CIC-IDS datasets. Every flow is classified into one of seven classes with a confidence value, an anomaly score and per-class probabilities. Traffic reaches the detector either through live capture from a host network interface or mirror port, with immediate classification, or through a REST interface for external sensors that already produce flow records.
 
-- **Flow-level intrusion detection.** The system analyzes summarized network *flow records* (described by thirty numerical features such as packet counts, byte rates, inter-arrival times, and TCP flag counts) rather than raw packet payloads. This is the same style of feature set used by well-known public intrusion-detection datasets.
-- **Multi-class classification.** NIDS classifies each flow as benign or as one of six attack types, giving security staff specific information about the nature of a threat rather than a simple "good/bad" label.
-- **From-scratch model implementation.** All learning algorithms are written directly using numerical array operations, with no external machine-learning library.
-- **End-to-end system.** The project includes data generation and preprocessing, model training and evaluation, real-time inference, a REST API, an operator dashboard, structured logging, performance metrics, and alerting.
-- **Optional automated enforcement.** An enforcement subsystem can translate high-confidence detections into protective actions (such as rate-limiting or blocking a source address) through a pluggable backend, with safety features such as a dry-run mode and a list of always-allowed networks.
-- **Authentication and role-based access control.** The system includes a complete authentication layer with JWT-based session tokens and three user roles (Administrator, Operator, Viewer), each with appropriate access permissions. The JWT signing and password hashing are implemented from scratch using Python's standard-library `hmac`, `hashlib`, and `os` modules, consistent with the project's transparency philosophy.
-- **Realistic deployment.** The system is containerized and includes deployment configuration suitable for running in a production environment.
+Detections produce severity-ranked alerts, and an optional prevention mode applies rate-limit, block or drop actions through a pluggable firewall backend under a confidence gate, an allowlist, a duplicate check and a capacity cap. An operator dashboard shows a live packet table, a verdict feed pushed over WebSocket, threat and severity breakdowns, the most active source addresses, the blocked addresses and a "try-it" probe. Access is controlled by two roles — Administrator and Viewer — with JWT sessions and PBKDF2-hashed passwords. Training on the corrected CIC-IDS2017 dataset is fully reproducible, from download and cleaning through training, weight tuning and an old-versus-new comparison, and the system is packaged for Docker Compose (API, trainer, nginx, Prometheus, Grafana) and Kubernetes.
 
 ### Limitations
 
-The project also has the following limitations:
-
-- **Dependence on an external traffic sensor.** NIDS consumes pre-extracted flow records. It does not capture packets from the wire itself; in a real deployment a separate flow-extraction tool would feed traffic into the system.
-- **Evaluated on a benchmark dataset.** A bundled synthetic generator is used only for quick demonstrations, continuous-integration runs, and unit tests. The evaluation results reported in this document were obtained on a real, labelled subset of the CIC-IDS2017 dataset. As with any benchmark dataset, these results approximate — but do not perfectly reproduce — the behaviour of a specific live production network.
-- **Flow-level analysis only.** Because the system inspects flow summaries rather than packet contents, it cannot examine encrypted payloads or detect threats that are only visible at the application-content level.
-- **Offline (batch) training.** Models are trained beforehand on collected data. The system does not currently learn continuously from live traffic, so adapting to new patterns requires retraining.
-- **Single-node operational features.** Some operational components, such as the request rate limiter, are designed for single-node deployment and would require additional engineering to scale across many servers.
-- **Platform-specific enforcement.** The active blocking backend targets a Linux firewall mechanism, so automated enforcement is limited to compatible host environments.
+Because the system inspects flow statistics only, payloads are never examined, and attacks visible only in encrypted or application content are out of reach. The training data comes from one 2017 testbed; published cross-dataset studies show that accuracy drops sharply when a detector is moved to a different network, and this project makes no stronger claim. The corrected dataset contains only 36 Infiltration and 104 Web Attack flows, so the figures for those two classes (7 and 21 test rows) are indicative rather than statistically strong. Models are trained offline and do not learn continuously, so adapting to new traffic requires retraining. Live capture needs raw-socket (root) access and sees only the traffic that reaches the capturing interface; real blocking uses the Linux nftables firewall, and other platforms run enforcement in log-only mode. Finally, the request rate limiter is in-process and would need a shared store to scale across several nodes.
 
 ## 1.5 Development Methodology
 
-The project followed an **iterative and incremental development methodology**. This approach was chosen because the system is composed of clearly separable layers — data handling, models, training, inference, transport, monitoring, and enforcement — that could each be built, tested, and improved in successive cycles rather than all at once. Each increment produced a working, testable piece of the system, and later increments built on top of earlier ones.
+The project used an **iterative and incremental** methodology. The system decomposes into layers — data, models, training, inference, capture, API, dashboard, alerting and enforcement — each of which was built, tested and integrated in its own cycle, with later cycles revisiting earlier ones as evaluation results came in. Work began with the requirements: the attack classes, the feature set, the interfaces and the performance and safety targets. Design followed, with a modular architecture and a strict dependency rule under which inner layers (data, models, utilities) never depend on outer layers (inference, API, training). Implementation then proceeded incrementally: preprocessing and data loading first, then the four models, the ensemble, the training pipeline, the inference engine, the API with authentication and dashboard, alerting, metrics and enforcement, and finally live packet capture. Unit tests for algorithms and utilities and integration tests for the API, enforcement and capture paths were written alongside the code.
 
-The development proceeded through the following stages:
-
-1. **Requirement identification and analysis.** The functional and non-functional requirements were established first: which attack types to detect, what feature set to use, what interfaces were needed, and what performance and reliability targets the service should meet.
-
-2. **Design.** A modular architecture was defined with strict boundaries between layers, so that inner components (such as the models) never depend on outer components (such as the web interface). This made each module independently testable and replaceable.
-
-3. **Incremental implementation.** The data generator and preprocessing pipeline were built first, followed by the individual machine-learning models, the ensemble layer, the training pipeline, the inference engine, the REST API and dashboard, the monitoring and alerting subsystem, and finally the optional enforcement layer. Each component was implemented and verified before the next one depended on it.
-
-4. **Testing.** Unit tests were written for individual algorithms and utilities (including the hand-built evaluation metrics), and integration tests were written for the API and the enforcement workflow. Testing ran alongside development so that defects were caught early.
-
-5. **Integration and evaluation.** Once the models and services were connected, the full system was evaluated end-to-end, measuring classification accuracy, per-class performance, and inference latency.
-
-6. **Deployment preparation.** The system was containerized and supplied with configuration for monitoring, along with a continuous-integration pipeline that automatically lints, tests, and builds the project.
-
-A single configuration file acts as the central source of all tunable settings, and any value can be overridden at deployment time through environment variables. This supports the incremental philosophy by allowing the same code to behave differently in development, testing, and production without modification.
+Evaluation drove one major correction. The first evaluation exposed that the initial training subsample contained almost no real rows for three attack classes, so the data pipeline was rebuilt around the corrected CIC-IDS2017 dataset, the live feature extractor was aligned with the dataset's conventions, and the models were retrained and re-evaluated (Chapter 4). Deployment preparation — container images, the monitoring stack, Kubernetes manifests and a continuous-integration pipeline — closed the cycle. A single YAML configuration file holds every tunable value, and any value can be overridden by an environment variable, so the same code runs unchanged in development, testing and production.
 
 ## 1.6 Report Organization
 
-The remainder of this report is organized into the following chapters:
-
-- **Chapter 2 — Background Study and Literature Review** presents the fundamental theories, general concepts, and terminologies related to network intrusion detection and the machine-learning techniques used in the project, and reviews similar projects, datasets, and research results produced by other researchers.
-
-- **Chapter 3 — System Analysis and Design** describes the requirement analysis (functional and non-functional requirements, illustrated with use-case diagrams), the feasibility analysis, and the system models, including class, object, state, sequence, activity, component, and deployment diagrams, together with relevant algorithm details.
-
-- **Chapter 4 — Implementation and Testing** explains the tools and technologies used, the implementation details of the major modules, and the testing performed, including unit and system test cases and an analysis of the results obtained.
-
-- **Chapter 5 — Conclusion and Future Recommendations** summarizes the outcomes of the project, reflects on the objectives achieved, and outlines possible directions for future enhancement.
-
+Chapter 2, Background Study and Literature Review, explains flows, intrusion detection, the four learning algorithms and the benchmark datasets, and reviews related research. Chapter 3, System Analysis and Design, presents the requirements, the feasibility study, the UML models — use case, class, object, state, sequence, activity, component and deployment — the refined design including the architecture and the live feature-extraction rules, and the algorithms. Chapter 4, Implementation and Testing, describes the tools, the implementation of each module, the test suite, the training data and the evaluation results. Chapter 5, Conclusion and Future Recommendations, summarises the outcomes and proposes further work.
 
 ```{=openxml}
 <w:p><w:r><w:br w:type="page"/></w:r></w:p>
@@ -324,72 +281,64 @@ The remainder of this report is organized into the following chapters:
 
 ## 2.1 Background Study
 
-This section explains the fundamental concepts and terminology needed to understand the NIDS system. The aim is to relate each concept directly to the way it is used in the project rather than to present general definitions in isolation.
-
 ### 2.1.1 Network Traffic and Flows
 
-When two computers communicate over a network, they exchange a stream of small units of data called *packets*. Examining every individual packet is expensive and, when traffic is encrypted, often unhelpful. A more practical unit of analysis is the **network flow**: a summary of a single conversation between two endpoints over a period of time. Instead of recording raw content, a flow records statistical properties — for example, how long the conversation lasted, how many packets and bytes were sent in each direction, how quickly packets arrived, the average packet size, and how often particular control flags (such as SYN, ACK, RST, and FIN, which mark stages of a connection) appeared. NIDS works entirely at this flow level, representing each conversation as a fixed list of thirty numerical features. This is the same kind of feature representation used by widely studied public intrusion-detection datasets, which makes the system both efficient and compatible with real traffic-extraction tools.
+Computers exchange data as *packets*. Inspecting each packet is expensive and, for encrypted traffic, uninformative, so intrusion detectors usually work on **flows**: all packets of one conversation, identified by source and destination address, source and destination port and protocol, in both directions. A flow is summarised by statistics — duration, packets and bytes per direction, packet-length mean and variance, inter-arrival times, counts of TCP flags such as SYN, ACK, RST and FIN, initial window sizes, and active/idle periods. NIDS represents every flow by thirty such features, the same family that the CICFlowMeter tool computes for the public CIC-IDS datasets, which keeps the system compatible with real traffic extraction tools.
 
 ### 2.1.2 Intrusion Detection and Prevention
 
-An **Intrusion Detection System (IDS)** observes activity and reports suspected attacks, while an **Intrusion Prevention System (IPS)** goes a step further and actively blocks or limits malicious traffic [1]. Detection approaches are usually grouped into two families. **Signature-based** (or misuse) detection compares activity against a database of known attack patterns; it is precise for known threats but blind to new ones. **Anomaly-based** detection builds a model of normal behaviour and flags anything that deviates significantly from it; it can catch novel attacks but may produce more false alarms [2]. NIDS deliberately combines both philosophies: its supervised models behave like a learned, generalized form of misuse detection, recognizing the fingerprints of known attack classes, while its Isolation Forest performs anomaly detection to surface traffic that does not resemble normal behaviour. The optional enforcement layer gives the system an IPS capability, mapping confident detections to protective actions.
+An **IDS** observes traffic and raises alerts; an **IPS** also blocks or limits the offending traffic [1]. **Signature (misuse) detection** compares traffic with known attack patterns — precise but blind to new attacks. **Anomaly detection** models normal behaviour and flags deviations — able to catch novel attacks at the cost of more false alarms [2]. NIDS combines both: its supervised models are a learned, generalised form of misuse detection, its Isolation Forest is an anomaly detector, and its enforcement layer turns the system into an IPS when enabled.
 
-### 2.1.3 Common Network Attacks
+### 2.1.3 Attack Classes Detected
 
-NIDS is trained to distinguish benign traffic from six attack categories, each with a distinct behavioural fingerprint:
+- **DDoS** — floods that exhaust a service; very high packet and byte rates, often many short connections. The dataset's DoS and DDoS tools (Hulk, GoldenEye, Slowloris, Slowhttptest, LOIC, Heartbleed) form this class.
+- **Port Scan** — probing of many ports; thousands of tiny two-packet flows (SYN, then RST or SYN-ACK).
+- **Brute Force** — repeated authentication attempts against FTP or SSH; many similar medium-length connections.
+- **Botnet** — compromised hosts talking to a controller; periodic, automated patterns.
+- **Infiltration** — activity after a host has been compromised; low volume and hard to separate from normal use.
+- **Web Attack** — SQL injection, cross-site scripting and web brute force; unusual request shapes towards a web server.
 
-- **DDoS (Distributed Denial of Service):** a flood of traffic from many sources intended to overwhelm a service, characterized by extremely high packet and byte rates.
-- **Port Scan:** systematic probing of many network ports to discover open services, characterized by many short connection attempts.
-- **Brute Force:** repeated login attempts to guess credentials, characterized by many similar, repetitive connections to an authentication service.
-- **Botnet:** traffic generated by compromised machines communicating with a controller, often showing periodic, automated patterns.
-- **Infiltration:** stealthy unauthorized access following an initial compromise, typically low-volume and difficult to distinguish from normal activity.
-- **Web Attack:** attacks aimed at web applications, such as injection or cross-site scripting attempts, visible through unusual request patterns.
-
-Because these attacks differ so widely — from very loud (DDoS) to very quiet (Infiltration) — no single model recognizes all of them equally well, which is one of the main reasons NIDS uses an ensemble.
+Because these differ so much — from very loud to very quiet — no single model handles all of them equally well, which is the primary motivation for an ensemble.
 
 ### 2.1.4 Machine Learning for Classification
 
-**Machine learning** allows a system to learn patterns from examples instead of following hand-written rules. In **supervised learning**, the model is trained on data that is already labelled with the correct answer; it learns to map input features to the correct class so that it can later classify new, unlabelled data. Intrusion detection of known attack types is naturally a supervised **classification** problem, where the classes are "benign" and the various attack categories. In **unsupervised** or **anomaly detection**, the model is trained mostly on normal data and learns to recognize anything that does not fit, which is useful for catching unknown attacks. NIDS uses supervised learning for its Random Forest and neural network, and anomaly detection for its Isolation Forest.
+**Supervised learning** fits a model to labelled examples so that it can label new data; detecting known attack types is a supervised, multi-class classification task. **Anomaly detection** learns what normal data looks like and flags what does not fit; it is the natural tool for unknown attacks. NIDS uses supervised learning for its Random Forest and MLP and anomaly detection for its Isolation Forest.
 
 ### 2.1.5 Decision Trees and Random Forests
 
-A **decision tree** classifies data by asking a sequence of simple yes/no questions about the feature values, splitting the data at each step into purer and purer groups until it can confidently assign a class. The quality of each split is measured by how well it separates the classes. A single tree, however, can easily "memorize" its training data and perform poorly on new data. A **Random Forest** addresses this by training many different trees, each on a random sample of the data and a random subset of the features, and then combining their votes [3]. This averaging makes the overall model far more stable and accurate than any single tree, and it provides a useful by-product: an estimate of which features were most important in making decisions, which helps analysts understand the model's reasoning. In NIDS, the Random Forest is the strongest single classifier for the known attack types.
+A **decision tree** splits the data by asking threshold questions on features, choosing at each step the split that makes the resulting groups purest (measured by Gini impurity or entropy), until groups are pure or a size/depth limit is reached. Single trees memorise their training data. A **Random Forest** trains many trees on bootstrap samples with random feature subsets and averages their votes [3]; the result is far more stable, and the samples left out of each tree (*out-of-bag*) give a free accuracy estimate. Feature importances derived from the trees tell an analyst which features drove decisions. In NIDS the Random Forest is the strongest single model.
 
 ### 2.1.6 Neural Networks (Multi-Layer Perceptron)
 
-A **Multi-Layer Perceptron (MLP)** is a basic form of artificial neural network. It is made up of layers of simple processing units ("neurons") connected by adjustable weights. Input features pass through one or more hidden layers, where each layer transforms the data and passes it on, until the final layer produces a probability for each class. The network *learns* by comparing its predictions to the correct answers and gradually adjusting its weights to reduce the error, a process known as **backpropagation** [4]. Modern training also uses an optimization technique that adapts how much each weight is changed on every step, making learning faster and more stable [5]. Neural networks are especially good at capturing complex, non-linear relationships between features, which lets the NIDS MLP recognize attack patterns that simpler models might miss. The project also applies standard techniques such as dropout (temporarily ignoring some neurons during training) and early stopping (halting training once performance stops improving) to prevent the network from overfitting.
+An **MLP** passes the input features through layers of weighted neurons with non-linear activations to a final layer of class probabilities. It learns by **backpropagation**: the prediction error is propagated backwards to compute how each weight should change [4], and the **Adam** optimiser adapts the step size per weight [5]. NIDS's MLP has three hidden layers (256, 128, 64 neurons), dropout and L2 regularisation against overfitting, and early stopping on a validation set.
 
 ### 2.1.7 Anomaly Detection with Isolation Forest
 
-The **Isolation Forest** is a method designed specifically to find rare, unusual data points [6]. Its key idea is simple and elegant: anomalies are "few and different," so they are easier to separate from the rest of the data than normal points are. The algorithm repeatedly splits the data at random; points that become isolated after only a few splits are judged to be anomalies, while points that require many splits are considered normal. In NIDS, the Isolation Forest is trained on normal traffic so that any flow which looks distinctly unusual receives a high anomaly score — even if it belongs to an attack type the supervised models have never been trained on. This is the project's main mechanism for detecting potential **zero-day** attacks.
+The **Isolation Forest** [6] builds random trees by splitting on random features at random thresholds; anomalies, being few and different, are isolated after few splits, so a short average path length means a high anomaly score. NIDS trains it on benign flows only, so any flow that is distinctly unlike normal traffic scores high even if it belongs to an attack type the supervised models never saw — the project's mechanism for zero-day detection.
 
 ### 2.1.8 Ensemble Learning
 
-**Ensemble learning** is the practice of combining several models so that their collective decision is better than any individual one. Different models tend to make different mistakes, so combining them often cancels out individual errors. NIDS's ensemble uses two rules. First, it blends the probability outputs of the Random Forest and the MLP using a weighted average, giving more influence to the model that is generally more accurate while still benefiting from the other's strengths. Second, it applies an *anomaly override*: if the supervised models judge a flow to be benign but the Isolation Forest reports a strong anomaly, the ensemble overrides the benign verdict and treats the flow as suspicious. Importantly, the ensemble can explain its decision by reporting each model's contribution, preserving the transparency that is central to the project.
+Different models make different mistakes, so combining them cancels errors. NIDS blends the Random Forest and MLP probabilities with weights chosen on a validation set, then applies an **anomaly override**: if the blended vote is benign but the Isolation Forest score is high *and* the supervised models still assign meaningful attack probability, the flow is reclassified as the most likely attack. The ensemble reports every component's contribution, preserving auditability.
 
-### 2.1.9 Data Preprocessing and Evaluation
+### 2.1.9 Data Preparation and Evaluation
 
-Before any model can learn, raw data must be cleaned and prepared. NIDS's preprocessing handles missing or invalid values, scales every feature to a comparable range so that no single large-valued feature dominates, and selects the most informative features by measuring how strongly each one separates the classes. The data is split into training, validation, and test sets in a way that preserves the proportion of each class, which is important because attacks are far rarer than normal traffic. To judge how well the models perform, the project relies on standard evaluation measures — **accuracy** (overall correctness), **precision** (how many flagged attacks were truly attacks), **recall** (how many real attacks were caught), and the **F1-score** (a balance of precision and recall) — all summarized in a **confusion matrix** that shows exactly which classes were confused with which. In keeping with the project's transparency goal, these evaluation measures are also implemented from scratch rather than taken from an external library.
+Real flow data contains infinities and missing values (a zero-duration flow has an infinite byte rate); preprocessing cleans them, standardises each feature with statistics learned on the training split only, and splits the data into training, validation and test sets while preserving class proportions. Evaluation uses **accuracy**, per-class **precision**, **recall** and **F1**, the **false-positive rate** (benign flows flagged as attacks — the cost an analyst feels most), the **detection rate** (attack flows flagged as attacks), the **confusion matrix**, and **ROC-AUC** for the anomaly detector. All of these are implemented from scratch as well.
 
 ### 2.1.10 Supporting System Concepts
 
-To function as a real service, NIDS uses several standard software and operations concepts. A **REST API** is a standard way for other programs to send data to the system and receive results over the web. A **dashboard** provides a visual interface for human operators. **Monitoring metrics** expose numerical indicators of the system's health and performance in a format that monitoring tools can collect and chart. **Containerization** packages the application together with everything it needs to run, so it behaves identically across different machines. These concepts allow the intrusion-detection logic to be operated reliably in a realistic production setting.
+A **REST API** lets other programs submit flows and read results; a **WebSocket** keeps a persistent connection so the server can push each verdict to the dashboard the moment it is made; **Prometheus-format metrics** expose counters and latency histograms to monitoring tools; **JWT** tokens carry a signed, expiring statement of who the user is and what role they hold; **containers** package the service and its dependencies so it runs identically everywhere.
 
 ## 2.2 Literature Review
 
-The idea of automatically monitoring computer systems for misuse dates back several decades. Anderson's early work introduced the concept of using audit data to detect security threats [7], and Denning's foundational intrusion-detection model formalized the idea of building a profile of normal behaviour and flagging deviations from it [8]. These works established the two enduring approaches — misuse (signature) detection and anomaly detection — that still shape intrusion-detection research today, and that NIDS deliberately combines.
+Automated misuse detection dates to Anderson's audit-trail monitoring [7], and Denning's intrusion-detection model formalised anomaly detection as deviation from a learned profile of normal behaviour [8]. These two ideas — misuse and anomaly detection — still organise the field, and NIDS deliberately combines them. NIST's guide to intrusion detection and prevention systems consolidates operational practice and the distinction between detection-only and prevention-capable systems [1].
 
-Early operational intrusion-detection systems were predominantly signature-based, with widely deployed open-source tools relying on hand-written rules to match known attacks [1]. The U.S. National Institute of Standards and Technology consolidated best practices for such systems in its guide to intrusion detection and prevention, which also describes the distinction between detection-only and prevention-capable systems [1]. While signature-based tools remain valuable for their precision against known threats, the security community recognized early that they cannot detect novel attacks, motivating the shift toward learning-based methods that NIDS follows.
+Buczak and Guven's survey of machine-learning methods for intrusion detection compares decision trees, support-vector machines, neural networks and ensembles and finds that no single algorithm dominates across attack types [2], which is the case for an ensemble. The algorithms used here have well-established foundations: Breiman's Random Forests [3], backpropagation [4] with the Adam optimiser [5], and Liu, Ting and Zhou's Isolation Forest [6]. Deep-learning detectors report strong benchmark results with larger networks [9]; this project intentionally uses a compact, transparent MLP instead.
 
-A large body of research has since applied machine learning to intrusion detection. Buczak and Guven surveyed a wide range of data-mining and machine-learning methods for cyber-security intrusion detection, comparing decision trees, support-vector machines, neural networks, and ensemble approaches, and noting the practical trade-offs between accuracy, training cost, and interpretability [2]. Their survey highlights that no single algorithm dominates across all attack types — a finding that directly supports NIDS's ensemble design, in which different models cover different weaknesses.
+Evaluation data matters as much as algorithms. KDD Cup 99 and its derivatives were criticised for redundant records and outdated traffic [10]. Sharafaldin, Lashkari and Ghorbani's CIC-IDS2017 provided realistic labelled traffic described by CICFlowMeter features [11], and it became the standard benchmark. Subsequent work, however, found substantial errors in it: Engelen, Rimmer and Joosen documented flaws in traffic generation, flow construction, feature extraction and labelling [12]; Lanvin et al. measured how much those errors change reported detection performance [13]; and Liu, Engelen et al. released corrected re-extractions of CIC-IDS2017 and CSE-CIC-IDS2018 with a fixed CICFlowMeter, relabelled flows and an explicit *Attempted* marker for attack traffic that never exhibited malicious behaviour [14]. NIDS trains on this corrected edition and follows its authors' guidance on the *Attempted* flows (Section 4.3.1).
 
-The individual algorithms used in this project each have well-established research foundations. The decision-tree and Random Forest methods build on Breiman's work, which demonstrated that combining many randomized trees produces a model that is both highly accurate and resistant to overfitting, while still offering measures of feature importance [3]. The neural-network component rests on the backpropagation algorithm for training multi-layer networks [4], combined with the adaptive optimization method introduced by Kingma and Ba, which has become a standard technique for training neural networks efficiently [5]. For anomaly detection, Liu, Ting, and Zhou's Isolation Forest provided an efficient way to identify rare points without first modelling the entire distribution of normal data [6]; NIDS adopts this method precisely because of its efficiency and its suitability for highlighting previously unseen attacks. More recent research has explored deep-learning approaches to intrusion detection, reporting strong results on benchmark datasets using larger and more complex networks [9]; NIDS intentionally uses a compact, fully transparent multi-layer perceptron instead, prioritizing auditability and modest computational requirements over model complexity.
+Two further findings shaped the design. Sommer and Paxson explain why machine-learning detectors that excel in the laboratory disappoint in deployment — costly false alarms, scarce labelled data, the gap between research datasets and live traffic, and the need for interpretable output [15]; NIDS answers with a low false-positive target, auditable decisions, confidence gates before any automated action, and a full operational service. Recent cross-dataset studies show that detectors trained on one benchmark generalise poorly to another, with accuracy sometimes near chance and AUROC dropping by about 30 points on average [16]; part of that gap comes from differences in how flow exporters compute features [17]. This is why NIDS reproduces the training data's feature conventions in its live extractor rather than approximating them.
 
-The quality of an intrusion-detection study depends heavily on the data used to evaluate it. Earlier research relied on datasets such as KDD Cup 99 and its refined version, but these were later criticized for redundant records and outdated traffic that no longer reflect modern networks [10]. To address these shortcomings, Sharafaldin, Lashkari, and Ghorbani produced the CIC-IDS2017 dataset, which contains realistic, labelled benign and attack traffic described by flow-level features, and which has become a widely used benchmark for evaluating modern intrusion detectors [11]. NIDS adopts the same thirty-feature, flow-level representation and the same attack categories used in this family of datasets, and its data pipeline is able to import such real datasets directly; this alignment makes the project's design and feature set consistent with current research practice.
-
-An influential and cautionary contribution to this field is the work of Sommer and Paxson, who examined why machine-learning intrusion detectors that perform well in the laboratory often disappoint in real deployments [12]. They identified problems such as the high cost of false alarms, the difficulty of obtaining good labelled data, the gap between research datasets and live traffic, and — crucially — the need for results to be *interpretable* so that analysts can act on them. These observations strongly influenced the design priorities of NIDS: the system is built to be transparent and auditable, it reports the reasoning behind each detection, it includes confidence thresholds and safety controls before taking any automated action, and it is engineered as a complete operational service rather than an isolated classifier.
-
-In summary, the literature establishes three consistent themes that this project builds upon. First, combining misuse and anomaly detection is more effective than either alone, which justifies NIDS's hybrid ensemble. Second, no single learning algorithm is best for all attack types, which justifies combining a Random Forest, a neural network, and an Isolation Forest. Third, practical intrusion detection demands interpretability, careful evaluation on realistic data, and genuine operational engineering — not merely a high accuracy score. NIDS's distinctive contribution within this landscape is to implement the core learning algorithms entirely from first principles, ensuring full transparency, while wrapping them in a complete, deployable detection-and-response system.
+In summary: combine misuse and anomaly detection; expect no single model to win everywhere; insist on real, correctly labelled data and on feature parity between training and deployment; and treat interpretability and operations as first-class requirements. NIDS's contribution is to satisfy all of these with algorithms implemented entirely from first principles.
 
 ```{=openxml}
 <w:p><w:r><w:br w:type="page"/></w:r></w:p>
@@ -399,262 +348,289 @@ In summary, the literature establishes three consistent themes that this project
 
 ## 3.1 System Analysis
 
-System analysis identifies what the system must do and how its parts relate to one another. This section presents the requirement analysis, the feasibility analysis, and the object, dynamic, and process models of NIDS.
-
 ### 3.1.1 Requirement Analysis
 
 #### i. Functional Requirements
 
-The functional requirements describe the services the system provides. NIDS has three actor roles: the **Administrator** (who configures the system, trains models, and manages user accounts), the **Security Operator** (a human analyst who monitors threats through the dashboard and manages alerts and blocks), and the **External System / Sensor** (an automated traffic source or another program that submits flows for classification through the API).
+NIDS has three actors: the **Administrator** (operates the system, classifies traffic, controls capture and enforcement, manages users, trains models), the **Viewer** — a security analyst with read-only access to the dashboard, alerts, blocked addresses and metrics — and the **External System / Traffic Sensor**, a program that submits flow records through the API using an API key or a token.
 
 The system shall:
 
-1. Accept a single network flow and classify it as benign or as a specific attack type.
-2. Accept a batch of up to one thousand flows and classify them together.
-3. Return, for every classification, the predicted class, a confidence value, an anomaly score, the per-class probabilities, and whether the anomaly override was triggered.
-4. Generate a severity-ranked alert whenever an attack is detected, and store recent alerts for review.
-5. Allow an operator to list and filter alerts by severity and to clear the alert history.
-6. Optionally enforce protective actions (rate-limit, block, or drop) against malicious source addresses when enforcement is enabled and the confidence is high enough.
-7. Never block addresses that belong to a configured allowlist of trusted networks.
-8. Allow an operator to list currently blocked addresses, unblock a specific address, and clear all blocks.
-9. Expose health and readiness endpoints and machine-readable performance metrics.
-10. Train all models from a dataset and produce a stored set of model artifacts and an evaluation report.
-11. Authenticate users via username and password, issuing a JWT token for subsequent requests.
-12. Enforce role-based access control so that detection and enforcement actions require at least the Operator role, while user management and system configuration require the Administrator role.
-13. Allow any authenticated user to change their own password, and allow administrators to create, list, and delete user accounts.
-14. Support backward-compatible API-key authentication for external systems, granting the Operator role.
+1. Capture packets from a network interface, aggregate them into bidirectional flows and compute the thirty flow features exactly as the training dataset defines them.
+2. Classify a completed flow as benign or as one of six attack classes, returning the class, a confidence value, an anomaly score, per-class probabilities and whether the anomaly override fired.
+3. Accept single flows and batches of up to one thousand flows through the REST API.
+4. Classify long-lived flows while they are still active, and flows that end with RST or FIN immediately, so that verdicts appear within seconds.
+5. Push every captured packet and every verdict to connected dashboards over WebSocket.
+6. Generate a severity-ranked alert with a recommended action for every detected attack, keep recent alerts in memory and append them to a log file.
+7. Aggregate alerts by source address so the dashboard can show the most active attackers and whether they are blocked.
+8. Optionally enforce a per-attack-class action (rate-limit, block or drop, each with a duration) when enforcement is enabled, the confidence exceeds the policy threshold, the address is not allowlisted, is not already blocked and the block cap is not reached.
+9. Allow an administrator to list, filter and clear alerts, list and remove blocks, and start or stop live capture.
+10. Expose health, readiness and Prometheus-format metrics endpoints without authentication, and all other endpoints only to authenticated users of the required role.
+11. Authenticate users by username and password, issue signed JWTs with an expiry, and let users change their own passwords; let administrators create, list and delete users.
+12. Train, evaluate and save all models from the dataset with a single command, tune the ensemble weights on the validation split, and report metrics per model and per class.
 
-The following use case diagram summarizes the interactions between the actors and the system.
+Figure 3.1 summarises the interactions between actors and system.
 
 ::: {custom-style="FigureCenter"}
-![](/Users/portpro/Documents/netsentry 3/docs/figures/usecase.png){width=6.0in}
+![](figures/usecase.png){width=6.0in}
 :::
 
 ::: {custom-style="FigureCenter"}
 **Figure 3.1: Use Case Diagram of NIDS**
 :::
 
-The main use cases are described in Table 3.1.
-
+::: {custom-style="FigureCenter"}
 **Table 3.1: Use Case Descriptions**
+:::
 
 | Use Case | Actor | Description |
 | --- | --- | --- |
-| Login / Authenticate | All actors | The user submits credentials; the system verifies them and returns a signed JWT token for subsequent requests. External systems may alternatively authenticate via an API key. |
-| Classify Single Flow | External System | The system receives one flow, preprocesses it, runs the ensemble, and returns a classification with confidence and anomaly information. Requires Operator or Admin role. |
-| Classify Batch of Flows | External System | The system receives many flows at once and classifies them in a single request, returning one result per flow and a count of alerts generated. Requires Operator or Admin role. |
-| View / Filter Alerts | Security Operator | The operator retrieves recent alerts, optionally filtered by severity level, to review detected threats. Requires any authenticated role. |
-| Clear Alerts | Security Operator | The operator clears the in-memory alert history. Requires Operator or Admin role. |
-| View Blocked IPs | Security Operator | The operator lists the addresses currently blocked by the enforcement layer, with the reason and expiry time. Requires any authenticated role. |
-| Unblock IP / Flush Blocks | Security Operator | The operator removes a specific block or clears all active blocks. Requires Operator or Admin role. |
-| Monitor Dashboard / Metrics | Security Operator | The operator views live statistics, alert summaries, and performance metrics through the web dashboard. |
-| Change Own Password | Security Operator, Administrator | Any authenticated user changes their own password by providing the current and new passwords. |
-| Train Models | Administrator | The administrator runs the training pipeline, which builds and evaluates all models and stores the artifacts. |
-| Configure / Enable Enforcement | Administrator | The administrator sets configuration values and turns the enforcement (prevention) mode on or off. |
-| Manage Users | Administrator | The administrator creates, lists, and deletes user accounts and assigns roles. Requires the Admin role. |
+| Login / Authenticate | All | Username and password are verified against PBKDF2 hashes and a signed JWT valid for 24 hours is returned; external systems may present an API key instead, which grants the Administrator role. |
+| Classify single flow / batch | External System, Administrator | One flow or up to 1,000 flows are preprocessed and classified; each result carries class, confidence, anomaly score and probabilities. Attack verdicts create alerts and may trigger enforcement. |
+| Start / stop live packet capture | Administrator | The in-process sniffer is started on a chosen interface; flows are classified as they complete and streamed to the dashboard. |
+| Probe a flow (Try-it panel) | Administrator | A preset or hand-edited flow is submitted from the dashboard to demonstrate a verdict. |
+| View live traffic & verdicts | Viewer (and Administrator) | The live table shows every packet; the feed shows every verdict as it is pushed over WebSocket. |
+| View & filter alerts | Viewer | Recent alerts are listed with severity, class, confidence and source address, filterable by severity. |
+| View blocked IPs / top source IPs | Viewer | Active blocks with remaining time, and the source addresses with the most alerts. |
+| View metrics & statistics | Viewer | Prediction counts, attack rate, latency percentiles, alert and block summaries. |
+| Change own password | Viewer, Administrator | The current password is verified before the new one is stored. |
+| Clear alerts / unblock IPs | Administrator | Clears the alert history, removes one block or flushes all blocks. |
+| Manage users | Administrator | Creates, lists and deletes accounts and assigns roles. |
+| Train / retrain models | Administrator | Runs the training pipeline from the command line; artifacts and the metrics report are written to disk and loaded at the next start-up. |
+
+Functional requirement 8 — automated response — is governed by a per-class policy (Table 3.2). Each attack class maps to an action, a duration and a minimum confidence.
+
+::: {custom-style="FigureCenter"}
+**Table 3.2: Enforcement Policy per Attack Class**
+:::
+
+| Attack class | Action | Duration | Minimum confidence |
+| --- | --- | --- | --- |
+| BENIGN | allow | — | — |
+| PortScan | rate-limit | 1 hour | 0.90 |
+| WebAttack | rate-limit | 1 hour | 0.90 |
+| BruteForce | block | 24 hours | 0.85 |
+| Botnet | block | 24 hours | 0.85 |
+| Infiltration | block | 24 hours | 0.85 |
+| DDoS | drop | 24 hours | 0.80 |
+
+A global gate (`min_confidence_to_enforce`, 0.85 in the shipped configuration) can raise the per-class thresholds, enforcement is off unless explicitly enabled, a dry-run mode logs what would be blocked without touching the firewall, and the default allowlist protects the local host.
 
 #### ii. Non-Functional Requirements
 
-The non-functional requirements describe the qualities the system must satisfy, summarized in Table 3.2.
-
-**Table 3.2: Non-Functional Requirements**
+::: {custom-style="FigureCenter"}
+**Table 3.3: Non-Functional Requirements**
+:::
 
 | Quality | Requirement |
 | --- | --- |
-| Performance | A single prediction should complete in only a few milliseconds, including request validation, to support real-time use. |
-| Scalability | The detection service should run as multiple stateless worker processes that can be scaled horizontally. |
-| Reliability | The system must expose health and readiness checks and fail safely; missing model artifacts must prevent the service from accepting traffic. |
-| Transparency | Every detection decision must be explainable, exposing each model's contribution and the anomaly score. |
-| Security | The API must support JWT-based authentication with role-based access control, backward-compatible API-key authentication, rate limiting, input validation, secure password storage (PBKDF2-SHA256), and a trusted-network allowlist that is never blocked. |
-| Maintainability | The code must be modular, with inner layers independent of outer layers, and covered by automated tests. |
-| Portability | The system must run identically across environments through containerization and external configuration. |
-| Observability | The system must emit structured logs, numerical metrics, and an alert stream suitable for external monitoring tools. |
+| Performance | Classification of one flow in about one millisecond including preprocessing; verdicts for captured flows within a few seconds of the flow completing. |
+| Accuracy | False-positive rate below 0.1 % on the held-out benchmark split; detection rate above 99 %. |
+| Reliability | Health and readiness checks; the service refuses traffic if model artifacts are missing; capture failures never crash the API. |
+| Transparency | Every verdict exposes each model's probabilities and the anomaly score; the training report records per-class metrics. |
+| Security | JWT authentication with RBAC, PBKDF2-SHA256 password storage, request rate limiting, strict input validation, and an allowlist of networks that can never be blocked. |
+| Maintainability | Modular code with an inward-only dependency rule; 150 automated tests; a single configuration file. |
+| Portability | Runs on any host with Python 3.10+; identical behaviour in containers through external configuration. |
+| Observability | Structured JSON logs with request identifiers, Prometheus metrics, an alert stream and a WebSocket event stream. |
 
-#### iii. Role-Based Access Control
+The security requirement is realised with two roles whose permissions are fixed per endpoint (Table 3.4).
 
-The system enforces three user roles with progressively broader permissions, summarized in Table 3.3. This ensures that read-only monitoring is available to all authenticated users, operational actions such as classification and enforcement management require at least the Operator role, and administrative tasks like user management and system configuration are restricted to administrators.
+::: {custom-style="FigureCenter"}
+**Table 3.4: Role-Based Access Control Matrix**
+:::
 
-**Table 3.3: Role-Based Access Control Matrix**
+| Capability | Viewer | Administrator |
+| --- | :---: | :---: |
+| View dashboard, live feed, alerts, blocked IPs, statistics | Yes | Yes |
+| Change own password | Yes | Yes |
+| Submit flows for classification (API, batch, Try-it probe) | No | Yes |
+| Start / stop live packet capture | No | Yes |
+| Clear alerts, unblock IPs, flush blocks | No | Yes |
+| Create, list and delete user accounts | No | Yes |
+| Health, readiness and metrics endpoints | Public | Public |
 
-| Capability | Viewer | Operator | Admin |
-| --- | :---: | :---: | :---: |
-| View dashboard, alerts, blocked IPs, stats | Yes | Yes | Yes |
-| Change own password | Yes | Yes | Yes |
-| Submit flows for classification | No | Yes | Yes |
-| Clear alerts, unblock IPs, manage enforcement | No | Yes | Yes |
-| Create, list, and delete user accounts | No | No | Yes |
-| Start / stop live packet capture | No | Yes | Yes |
-
-External systems authenticating via an API key are granted the Operator role, which allows them to submit flows for classification and trigger enforcement but not to manage user accounts.
+External systems that present a valid API key act with Administrator rights so that they can submit traffic; API keys are configured, not stored as users.
 
 ### 3.1.2 Feasibility Analysis
 
-**Technical Feasibility.** The project is technically feasible. It uses widely available, mature technologies — the Python language, the NumPy numerical library, and a standard web framework — all of which run on ordinary hardware. The machine-learning algorithms chosen are well documented in published research and were successfully implemented from first principles, which confirms that the technical approach is sound.
+**i. Technical Feasibility.** Python, NumPy, FastAPI and scapy are mature and run on ordinary hardware; the four algorithms are well documented in the literature and were implemented and validated against known results. The full training run takes about six minutes on a laptop.
 
-**Operational Feasibility.** The system is operationally feasible because it fits naturally into an existing security workflow. It receives flows from a traffic sensor, returns clear results, presents alerts on a dashboard for analysts, and can optionally take automated action. Safety features such as a dry-run mode and a trusted-network allowlist make it practical to adopt gradually.
+**ii. Operational Feasibility.** The system slots into an existing workflow: it watches an interface or receives flows from a sensor, shows verdicts on a dashboard, and can act automatically only under explicit, conservative conditions (confidence gate, allowlist, dry run). Two roles keep read-only monitoring separate from operational control.
 
-**Economic Feasibility.** The project is economically feasible. It relies only on free and open-source software and a small number of lightweight libraries, so there are no licensing costs. Because the models are compact and run quickly on a standard processor, the system does not require expensive specialized hardware.
+**iii. Economic Feasibility.** Only free, open-source software is used; no specialised hardware is needed, and inference costs about half a millisecond of CPU per flow.
 
-**Schedule Feasibility.** The project was schedule-feasible. The modular, incremental development approach allowed each component to be built and tested in a defined period, so the work fit within the semester timeline. The use of automated testing reduced the time spent on debugging integration problems.
-
-### 3.1.3 Object Modelling using Class and Object Diagrams
-
-The system is organized into classes with clear responsibilities. The class diagram below shows the main classes and their relationships.
+**iv. Schedule Feasibility.** The layered, incremental plan allowed each module to be built and tested within the semester, including one full rebuild of the data pipeline after evaluation exposed the training-data problem. Figure 3.2 shows the planned timeline against the semester's proposal, mid-term and final-defence milestones.
 
 ::: {custom-style="FigureCenter"}
-![](/Users/portpro/Documents/netsentry 3/docs/figures/class.png){width=6.0in}
+![](figures/gantt.png){width=6.0in}
 :::
 
 ::: {custom-style="FigureCenter"}
-**Figure 3.2: Class Diagram of the Core Modules**
+**Figure 3.2: Gantt Chart of the Project Schedule**
 :::
 
-The diagram shows that all models share a common `BaseModel` interface; the `RandomForest` is composed of many `DecisionTree` objects; and the `EnsembleNIDS` combines the three model types. The `InferenceEngine` uses the ensemble and the `Preprocessor`, and feeds its results to the `AlertManager` and, optionally, the `ResponseExecutor`, which in turn uses a pluggable `FirewallBackend` and an `Allowlist`.
+### 3.1.3 Object Modelling — Class and Object Diagrams
 
-While the class diagram captures the static structure, an object diagram shows a single runtime snapshot. Figure 3.3 illustrates the objects that exist while one high-confidence DDoS flow is being processed — from the incoming flow, through the engine and ensemble, to the resulting prediction, the alert it raises, and the enforcement block.
-
-::: {custom-style="FigureCenter"}
-![](/Users/portpro/Documents/netsentry 3/docs/figures/object.png){width=6.2in}
-:::
+Figure 3.3 shows the core classes. All models share the `BaseModel` interface; the `RandomForest` is composed of `DecisionTree` objects; `EnsembleNIDS` combines the three model types. `PacketSniffer` builds `FlowAccumulator` objects from packets and hands completed flows to the `InferenceEngine`, which uses the `Preprocessor` and the ensemble and reports results to the `AlertManager`. Alerts flow to the `ResponseExecutor`, which consults the `Allowlist` and delegates to a pluggable `FirewallBackend` (nftables, log-only or no-op).
 
 ::: {custom-style="FigureCenter"}
-**Figure 3.3: Object Diagram of a Detection Scenario**
-:::
-
-### 3.1.4 Dynamic Modelling using State and Sequence Diagrams
-
-**State Diagram.** When enforcement is active, a malicious source address moves through a small set of states. The state diagram below shows the lifecycle of an IP block.
-
-::: {custom-style="FigureCenter"}
-![](/Users/portpro/Documents/netsentry 3/docs/figures/state.png){width=6.0in}
+![](figures/class.png){width=6.0in}
 :::
 
 ::: {custom-style="FigureCenter"}
-**Figure 3.4: State Diagram of an IP Block Lifecycle**
+**Figure 3.3: Class Diagram of the Core Modules**
 :::
 
-**Sequence Diagram.** The sequence diagram below shows the order of messages when an external system submits a flow for classification.
+Figure 3.4 is a runtime snapshot of one real DDoS flow from the test split being processed: the flow features, the engine and ensemble with their tuned weights, the verdict (DDoS at 99.97 % confidence), the critical alert it raises, and the 24-hour drop enforced on its source.
 
 ::: {custom-style="FigureCenter"}
-![](/Users/portpro/Documents/netsentry 3/docs/figures/sequence.png){width=6.5in}
-:::
-
-::: {custom-style="FigureCenter"}
-**Figure 3.5: Sequence Diagram of a Prediction Request**
-:::
-
-### 3.1.5 Process Modelling using Activity Diagrams
-
-The activity diagram below shows the overall flow of processing a single request through detection and optional enforcement.
-
-::: {custom-style="FigureCenter"}
-![](/Users/portpro/Documents/netsentry 3/docs/figures/activity.png){width=4.2in}
+![](figures/object.png){width=6.0in}
 :::
 
 ::: {custom-style="FigureCenter"}
-**Figure 3.6: Activity Diagram of Detection and Enforcement**
+**Figure 3.4: Object Diagram of a Detection Scenario**
+:::
+
+### 3.1.4 Dynamic Modelling — State and Sequence Diagrams
+
+**State diagram.** Under enforcement a source address is *observed* until an attack verdict passes the policy gates, after which it is *rate-limited* (Port Scan, Web Attack) or *blocked/dropped* (Brute Force, Botnet, Infiltration, DDoS) for the duration fixed in Table 3.2, returning to *observed* when the timer expires or an administrator unblocks it (Figure 3.5).
+
+::: {custom-style="FigureCenter"}
+![](figures/state.png){width=6.0in}
+:::
+
+::: {custom-style="FigureCenter"}
+**Figure 3.5: State Diagram of a Source Address under Enforcement**
+:::
+
+**Sequence diagram.** Figure 3.6 shows a prediction request: the API authenticates, rate-limits and validates the request, the engine preprocesses and runs the ensemble, and — only if the verdict is an attack — the alert manager records an alert and asks the response executor to enforce it. The verdict is pushed to the dashboard over WebSocket and returned to the caller. Flows from the live sniffer follow the same path from `predict()` onward.
+
+::: {custom-style="FigureCenter"}
+![](figures/sequence.png){width=6.0in}
+:::
+
+::: {custom-style="FigureCenter"}
+**Figure 3.6: Sequence Diagram of a Prediction Request**
+:::
+
+### 3.1.5 Process Modelling — Activity Diagram
+
+Figure 3.7 traces one flow from arrival to telemetry, including the anomaly-override decision and the five conditions that must all hold before any enforcement action is taken.
+
+::: {custom-style="FigureCenter"}
+![](figures/activity.png){width=5.7in}
+:::
+
+::: {custom-style="FigureCenter"}
+**Figure 3.7: Activity Diagram of Detection and Enforcement**
 :::
 
 ## 3.2 System Design
 
-The overall architecture of NIDS, bringing together the edge, API, detection core, alerting, enforcement, observability, and offline training layers described in this report, is shown in Figure 3.7.
+### 3.2.1 Refinement of Class, Object, State, Sequence and Activity Diagrams
+
+During design the analysis models of Section 3.1 were refined into implementable structures. The abstract `BaseModel` received explicit `fit`, `predict`, `predict_proba`, `save` and `load` operations so that every model and the ensemble are interchangeable and persistable. `FirewallBackend` was refined into an abstract interface with three concrete implementations (nftables, log-only, no-op) so the enforcement layer can be switched without touching its logic. `Preprocessor` was refined to store the fitted scaling parameters so that inference applies exactly the transformation learned in training. `PacketSniffer` and `FlowAccumulator` were added to the class model once live capture became a requirement, together with the CICFlowMeter rules that make their output comparable with the training data. The state, sequence and activity models were refined to include the confidence gate, the allowlist, the duplicate-block check and the capacity cap that together make automated enforcement safe. The refined design is summarised by the architecture in Figure 3.8 and by the feature-extraction rules in Table 3.5.
+
+**Architecture.** Figure 3.8 shows the complete system. Traffic enters either as raw packets (live capture) or as flow records (API). The edge layer authenticates, validates and rate-limits. The detection core preprocesses each flow and runs the ensemble. Attack verdicts become alerts, which may be enforced through the firewall backend. Every verdict is pushed to the dashboard, every operation is counted in the metrics registry, and the offline training pipeline produces the artifacts that the engine loads at start-up.
 
 ::: {custom-style="FigureCenter"}
-![](/Users/portpro/Documents/netsentry 3/docs/figures/arch.png){width=5.6in}
+![](figures/arch.png){width=5.7in}
 :::
 
 ::: {custom-style="FigureCenter"}
-**Figure 3.7: Overall System Architecture of NIDS**
+**Figure 3.8: Overall System Architecture of NIDS**
 :::
 
+**Live feature extraction.** The model can only be as good on live traffic as the match between live features and training features. The training data was produced by CICFlowMeter, whose conventions differ from a naive implementation in several ways; the sniffer reproduces each one (Table 3.5), and unit tests pin them.
 
-### 3.2.1 Refinement of Diagrams
+::: {custom-style="FigureCenter"}
+**Table 3.5: Live Feature Extraction Rules Mirrored from CICFlowMeter**
+:::
 
-During design, the analysis models were refined into concrete, implementable structures. The abstract `BaseModel` was given explicit methods for fitting, predicting, returning probabilities, and saving and loading, so that every model — and the ensemble — can be used interchangeably and persisted to disk. The `FirewallBackend` was refined into an abstract interface with three concrete implementations (a Linux firewall backend, a log-only backend for dry runs, and a no-operation backend for testing), so the enforcement layer can be switched without touching its logic. The `Preprocessor` was refined to store the fitted scaling parameters and the selected feature indices so that the exact same transformation learned during training is reapplied at inference time. The sequence and activity models were refined to include the confidence gate, the allowlist check, the duplicate-block check, and the capacity limit, which together make automated enforcement safe.
+| Feature family | Rule reproduced in NIDS |
+| --- | --- |
+| Packet-length mean / std / variance, segment sizes, bytes per second | Computed on **transport payload bytes** (IP total length minus IP and transport headers), never on frame length; Ethernet padding is excluded. |
+| Forward header length | Sum of **transport headers only** (TCP data offset × 4; 8 bytes for UDP). |
+| Active / idle periods | A silence longer than **5 s** ends an active period *at the last packet before the gap*; flows without such a gap keep both at 0. |
+| Flow lifetime | A flow is cut **120 s** after its first packet; it ends immediately on **RST** or when **both** directions have sent FIN. |
+| Zero-duration flows | Byte and packet rates are reported as 0 (the dataset stores the tool's division-by-zero as 0). |
+| Minimum flow size | Two packets — a probe and its reply — form a classifiable flow, so scan probes are judged as soon as the reply arrives. |
+| Direction and timing | Forward is the direction of the first packet; durations and inter-arrival times are in microseconds. |
+
+Long-lived flows are additionally classified *in flight* every two seconds once they have accumulated twenty new packets, so a flood is reported while it is happening rather than after it stops.
 
 ### 3.2.2 Component Diagram
 
-The component diagram shows the major building blocks of the system and how they depend on one another.
+Figure 3.9 shows the packages and their «use» dependencies. Arrows point inward only: data, models and utilities never import inference, API or training code, so every model can be trained, tested and reused independently.
 
 ::: {custom-style="FigureCenter"}
-![](/Users/portpro/Documents/netsentry 3/docs/figures/component.png){width=6.0in}
+![](figures/component.png){width=6.0in}
 :::
 
 ::: {custom-style="FigureCenter"}
-**Figure 3.8: Component Diagram of NIDS**
+**Figure 3.9: Component Diagram of NIDS**
 :::
-
-A strict dependency rule is enforced: inner components (utils, data, models) never depend on outer components (API, inference, training). This keeps the models independently usable and the system easy to test.
 
 ### 3.2.3 Deployment Diagram
 
-The deployment diagram shows how the system is deployed in a production-style environment.
+Figure 3.10 shows the container deployment: nginx terminates TLS and proxies HTTP and WebSocket traffic to the API container, which runs the inference engine and the packet sniffer (host network with raw-socket capability); Prometheus scrapes the metrics endpoint for Grafana; a one-shot trainer container writes model artifacts to the shared volume the API loads at start-up; alerts are forwarded to a SOC sink.
 
 ::: {custom-style="FigureCenter"}
-![](/Users/portpro/Documents/netsentry 3/docs/figures/deployment.png){width=6.2in}
+![](figures/deployment.png){width=6.0in}
 :::
 
 ::: {custom-style="FigureCenter"}
-**Figure 3.9: Deployment Diagram of NIDS**
+**Figure 3.10: Deployment Diagram of NIDS**
 :::
 
 ## 3.3 Algorithm Details
 
-The detection logic is built on four algorithms, each implemented from first principles. They are described here in simple, step-by-step terms.
-
-**Random Forest (training).**
+**Random Forest (training and prediction).**
 
 ```
-1. Repeat for each of N trees:
-   a. Draw a random sample (with replacement) from the training data.
-   b. Grow a decision tree on this sample.
-      - At each node, consider a random subset of the features.
-      - Choose the split that best separates the classes.
-      - Stop when the node is pure or limits (depth, leaf size) are reached.
-   c. Remember which samples were NOT used (out-of-bag) for that tree.
-2. To predict: ask every tree for its class probabilities and average them;
-   the class with the highest average wins (soft voting).
-3. The out-of-bag samples give a free accuracy estimate without a separate
-   validation set.
+1. For each of N = 150 trees:
+   a. Draw a bootstrap sample (with replacement) of the training rows.
+   b. Grow a decision tree on the sample: at each node consider sqrt(30) random
+      features, choose the threshold that minimises Gini impurity, stop at
+      depth 20, at a pure node, or at fewer than 2 rows per leaf.
+   c. Remember the rows the tree did not see (out-of-bag).
+2. Predict: average the class-probability vectors of all trees (soft vote).
+3. The out-of-bag rows give an accuracy estimate without a separate set;
+   averaging each feature's impurity reduction gives feature importances.
 ```
 
-**Multi-Layer Perceptron (training, high level).**
+**Multi-Layer Perceptron (training).**
 
 ```
-1. Initialize the connection weights with small random values.
-2. For each training round (epoch):
-   a. Shuffle the data and split it into small batches.
-   b. Forward pass: push each batch through the layers to get predictions.
-   c. Compare predictions with the correct labels to measure the error.
-   d. Backward pass: work out how much each weight contributed to the error.
-   e. Update the weights to reduce the error (using the Adam update rule).
-3. Use dropout during training to avoid over-reliance on any neuron, and stop
-   early if accuracy on a validation set stops improving.
+1. Layers 30 -> 256 -> 128 -> 64 -> 7 with ReLU activations and softmax output;
+   He initialisation.
+2. For up to 50 epochs over shuffled mini-batches of 512 rows:
+   a. Forward pass with dropout (p = 0.3) on hidden layers.
+   b. Cross-entropy loss with L2 penalty (1e-4).
+   c. Backward pass to obtain weight gradients; Adam update (lr = 0.001).
+   d. Stop early when the validation loss has not improved for 8 epochs
+      (the best weights are kept).
 ```
 
 **Isolation Forest (anomaly scoring).**
 
 ```
-1. Build many small trees, each on a random subset of NORMAL traffic.
-   - At each node pick a random feature and a random split value.
-2. To score a flow: drop it through every tree and record how many splits
-   were needed to isolate it.
-3. Flows that are isolated quickly (short paths) get a HIGH anomaly score;
-   flows that need many splits get a LOW score.
-4. A threshold, calibrated from the training data, decides which scores count
-   as anomalies.
+1. Build 150 trees, each on a random subsample of 256 BENIGN training rows,
+   splitting on a random feature at a random threshold until isolation.
+2. Score a flow by its average path length across trees, normalised to [0, 1]:
+   short paths (isolated quickly) mean high anomaly scores.
+3. A threshold calibrated on training data (contamination 3 %) marks anomalies.
 ```
 
 **Ensemble fusion.**
 
 ```
-1. Take the averaged class probabilities from the Random Forest and the MLP.
-2. Blend them with fixed weights that favour the stronger model.
-3. Pick the class with the highest blended probability.
-4. Anomaly override: if the blended result says "benign" but the Isolation
-   Forest score is above the boost threshold, change the result to the most
-   likely attack class instead.
-5. Return the final class plus every component's contribution for auditing.
+1. P = 0.9 * P_RandomForest + 0.1 * P_MLP   (weights chosen on the validation split)
+2. Verdict = argmax P.
+3. Anomaly override: if the verdict is BENIGN, the Isolation Forest score is
+   at least 0.9 and the highest attack probability is at least 0.15, the
+   verdict becomes that attack class.
+4. Return the verdict with every component's probabilities and the anomaly score.
 ```
 
 ```{=openxml}
@@ -667,151 +643,215 @@ The detection logic is built on four algorithms, each implemented from first pri
 
 ### 4.1.1 Tools Used
 
-The tools and technologies used to build NIDS are listed in Table 4.1.
-
+::: {custom-style="FigureCenter"}
 **Table 4.1: Tools and Technologies Used**
+:::
 
-| Category | Tool / Technology | Purpose in the Project |
+| Category | Tool / Technology | Purpose |
 | --- | --- | --- |
-| Programming Language | Python 3.10+ | Main implementation language for all components. |
-| Numerical Computing | NumPy | The only library used for the machine-learning math (arrays and vector operations). |
-| Web Framework | FastAPI + Uvicorn | Serves the REST API and the operator dashboard. |
-| Request Validation | Pydantic | Validates and parses incoming JSON request bodies. |
-| Configuration | PyYAML | Loads the central configuration file. |
-| Testing | pytest, httpx | Runs unit and integration tests; httpx drives the API test client. |
-| Monitoring | Custom Prometheus exporter | Emits counters, gauges, and histograms in Prometheus text format. |
-| Containerization | Docker, Docker Compose | Packages the application and its monitoring stack. |
-| Enforcement Backend | nftables (Linux firewall) | Applies real IP blocks in prevention mode. |
-| Version Control / CI | Git, GitHub Actions | Source control and an automated lint-test-build pipeline. |
-| Visualization | Grafana | Dashboards built on the exported metrics. |
+| Language | Python 3.10+ | All components. |
+| Numerical computing | NumPy | The only library used for the machine-learning mathematics. |
+| Packet capture | scapy | Reads packets from the interface for the live sniffer (optional dependency). |
+| Web framework | FastAPI, Uvicorn | REST API, WebSocket endpoint and dashboard hosting. |
+| Validation / configuration | Pydantic, PyYAML | Request schemas; central configuration with environment overrides. |
+| Testing | pytest, httpx | 150 unit and integration tests; API test client. |
+| Monitoring | Custom Prometheus exporter, Prometheus, Grafana | Metrics in Prometheus text format; scraping and dashboards. |
+| Enforcement | nftables | Real blocking on Linux hosts; log-only and no-op backends elsewhere. |
+| Deployment | Docker, Docker Compose, nginx, Kubernetes manifests | Containers, TLS proxy, cluster deployment. |
+| Version control / CI | Git, GitHub Actions | Source control; lint, test and image build on every push. |
+| CASE / diagramming | Python + matplotlib (scripted UML), pandoc | Every diagram and this report are generated from version-controlled scripts (`docs/figures/make_figures.py`, `docs/build_docs.py`). |
+| Database platform | None — JSON files and in-memory stores | Users in `users.json` (PBKDF2 hashes), alerts in `alerts.jsonl`, model artifacts on disk, block table in memory; no relational database is required. |
+| Dataset | Corrected CIC-IDS2017 (DistriNet, KU Leuven) | Training and evaluation data (downloaded by the project's script). |
 
-It is important to note that no external machine-learning library (such as scikit-learn, TensorFlow, or PyTorch) was used. Every model and every evaluation measure was written by hand using NumPy.
+No machine-learning library — scikit-learn, TensorFlow, PyTorch or similar — is used anywhere in the system.
 
 ### 4.1.2 Implementation Details of Modules
 
-**Data Module.** This module generates a labelled synthetic dataset that imitates the statistical fingerprints of real attacks, loads real public datasets when available, and preprocesses the data. The `Preprocessor` cleans invalid values, scales features to a comparable range, selects the most informative features, and performs a class-preserving split into training, validation, and test sets. The transformation parameters learned on the training set are stored and reused, which prevents information from the test set leaking into training.
+**Data module.** `real_dataset.py` loads the corrected CIC-IDS2017 CSVs, maps the CICFlowMeter column names onto the thirty NIDS features, maps the fine-grained labels onto the seven classes, drops flows marked *Attempted*, removes exact duplicate rows, caps the large classes and writes a single training CSV. The `Preprocessor` replaces infinities and missing values (median imputation), clips extreme values, standardises each feature with training-set statistics, performs the stratified train/validation/test split, and is saved with the models so inference applies exactly the same transformation. A synthetic generator remains only for unit tests and quick demonstrations.
 
-**Models Module.** This module contains the four from-scratch models behind a shared interface. The `DecisionTree` builds itself using an information-gain split search and an iterative (non-recursive) build loop so that deep trees do not exhaust the program's call stack. The `RandomForestClassifier` trains many such trees on bootstrap samples with random feature subsets, can train them across multiple processes, and reports feature importances and an out-of-bag accuracy estimate. The `MLPClassifier` implements a feed-forward neural network with forward and backward passes, the Adam update rule, dropout, weight regularization, and early stopping. The `IsolationForest` builds random trees on normal traffic and scores anomalies by how quickly each flow is isolated. The `EnsembleNIDS` combines the three models using a weighted vote and the anomaly-override rule, and can report each component's contribution.
+**Models module.** `DecisionTree` (Gini or entropy splits, iterative construction so deep trees cannot exhaust the call stack), `RandomForestClassifier` (bootstrap sampling, random feature subsets, multi-process training, out-of-bag score, feature importances), `MLPClassifier` (forward and backward passes, Adam, dropout, L2, early stopping), `IsolationForest` (random trees on benign data, path-length scoring, calibrated threshold) and `EnsembleNIDS` (weighted soft vote, anomaly override, per-component detail) all share the `BaseModel` interface and save and load themselves.
 
-**Training Module.** The `TrainingPipeline` orchestrates the whole workflow: it loads or generates data, splits it, fits the preprocessor, trains the Random Forest, the MLP (with a validation set for early stopping), and the Isolation Forest (on benign traffic only), assembles the ensemble, evaluates every model on the held-out test set, and saves all artifacts together with a JSON evaluation report.
+**Training module.** `TrainingPipeline` loads the prepared CSV, splits it, fits the preprocessor on the training rows, trains the Random Forest, the MLP (with the validation split for early stopping) and the Isolation Forest (benign rows only), assembles the ensemble, evaluates every model on the test split and writes the artifacts and a JSON metrics report. `tune_ensemble.py` searches the vote weight on the validation split and re-scores the test split; `compare_models.py` scores two artifact sets on the identical held-out rows.
 
-**Inference Module.** The `InferenceEngine` loads the saved preprocessor and ensemble once at startup and serves predictions for single flows or batches. It converts incoming feature dictionaries into a numeric matrix, applies the stored preprocessing, runs the ensemble, and returns a JSON-ready result with the prediction, confidence, anomaly score, and per-class probabilities. It also tracks latency percentiles for monitoring. The `AlertManager` turns attack predictions into severity-ranked alerts, stores recent alerts in a fixed-size buffer, and appends them to a log file.
+**Capture module.** `PacketSniffer` runs scapy in a background thread, parses each packet into CICFlowMeter-style fields (`parse_packet`), keys flows bidirectionally by their five-tuple and feeds `FlowAccumulator` objects. A flow is classified when it closes (RST or both FINs), when it is idle for 30 s, when it reaches the 120 s lifetime, or in flight after twenty new packets. Every packet and every verdict is broadcast to the dashboard. The command-line capture tool and the pcap evaluator import the same code, so the three paths cannot drift apart.
 
-**Authentication Module.** The authentication layer is implemented entirely from scratch using the Python standard library, consistent with the project's transparency philosophy. The `JWTHandler` creates and verifies JSON Web Tokens using HMAC-SHA256 signing (`hmac` and `hashlib` modules) with base64url-encoded headers and payloads, enforcing configurable token expiry. The `UserStore` manages user accounts in a JSON file with thread-safe read/write operations and atomic file replacement; passwords are hashed using PBKDF2-SHA256 with 100,000 iterations and a random 32-byte salt (`hashlib.pbkdf2_hmac` and `os.urandom`). Three default users (admin, operator, viewer) are seeded on first run. The `Role` enum defines three permission levels — Admin, Operator, and Viewer — and a `require_role()` dependency factory enforces access control on each API endpoint. The module also provides backward-compatible API-key authentication, granting the Operator role to external systems that present a valid key.
+**Inference module.** `InferenceEngine` loads the preprocessor and ensemble once, converts feature dictionaries into matrices, classifies single flows or batches, and tracks latency percentiles. `AlertManager` maps attack classes to severities and recommended actions, keeps the last thousand alerts, appends every alert to `alerts.jsonl` and invokes the enforcement callback.
 
-**API Module.** The API layer exposes the system over HTTP. It provides health and readiness checks, a metrics endpoint, single and batch prediction endpoints, alert listing and clearing, enforcement-management endpoints for listing, removing, and flushing blocks, and authentication endpoints for login, user profile, password changes, and user management. It integrates JWT-based and API-key authentication, rate limiting, role-based access control, validates all inputs, and serves the operator dashboard with a login page.
+**Authentication module.** `JWTHandler` signs and verifies tokens with HMAC-SHA256 and enforces expiry; `UserStore` keeps accounts in a JSON file with atomic writes and hashes passwords with PBKDF2-SHA256 (100,000 iterations, per-user random salt); `require_role()` guards each endpoint; two accounts (administrator, viewer) are seeded on first start and should be changed immediately.
 
-**Enforcement Module.** The `ResponseExecutor` evaluates each alert against a response policy that maps every attack type to an action (allow, rate-limit, block, or drop) with a required confidence and a block duration. Before acting, it validates the address format, checks the confidence gate, checks the trusted-network allowlist, avoids duplicate blocks, and respects a maximum-blocks safety cap. Actual blocking is delegated to a pluggable firewall backend, and a dry-run mode allows the policy to be validated without taking real action.
+**API module.** Health, readiness and metrics endpoints are public. Authenticated endpoints cover prediction (single and batch), alerts, blocked addresses, statistics, capture control and user management, each guarded by the role in Table 3.4 and by a sliding-window rate limiter (240 requests per minute per client). A WebSocket endpoint streams packet and verdict events to the dashboard, which is served with its login page from the same process.
 
-**Monitoring and Utilities.** A custom Prometheus exporter records counters, gauges, and histograms and renders them in the standard text format, with no external metrics library. The utilities provide configuration loading (with environment-variable overrides), structured JSON logging with request correlation, and the from-scratch evaluation metrics.
+**Enforcement module.** `ResponseExecutor` evaluates every alert against the policy in Table 3.2, applies the confidence gate, allowlist, duplicate check and capacity cap (10,000 blocks), and delegates to the configured backend; blocks carry a time-to-live and can be listed, removed or flushed.
+
+**Monitoring and utilities.** A small metrics registry renders counters, gauges and histograms in Prometheus text format; utilities provide configuration loading with environment overrides, structured JSON logging with request identifiers, and the from-scratch evaluation metrics.
 
 ## 4.2 Testing
 
-The system was tested using automated unit tests for individual components and integration (system) tests for end-to-end behaviour, all run with the pytest framework.
+All tests run with pytest, locally and in the continuous-integration pipeline.
 
 ### 4.2.1 Test Cases for Unit Testing
 
-Unit tests verify that each component behaves correctly in isolation. A representative selection is shown in Table 4.2.
-
+::: {custom-style="FigureCenter"}
 **Table 4.2: Unit Test Cases**
+:::
 
 | ID | Component | Test Case | Expected Result |
 | --- | --- | --- | --- |
-| U1 | Decision Tree | Fit on sample data and predict | Predictions match known labels; probabilities sum to one |
-| U2 | Decision Tree | Compute Gini and entropy splits | Both criteria produce valid, consistent splits |
-| U3 | Random Forest | Out-of-bag score | Score lies within a valid range (0 to 1) |
-| U4 | Random Forest | Feature importances | Importances are non-negative and sum to one |
-| U5 | MLP | Fit and predict | Network learns and classifies correctly |
-| U6 | MLP | Output probabilities | Class probabilities sum to one |
-| U7 | MLP | Early stopping | Training stops when validation stops improving |
-| U8 | Isolation Forest | Detect anomalies | Clear outliers receive high anomaly scores |
-| U9 | Ensemble | End-to-end fusion | Combined prediction is produced with component details |
-| U10 | Preprocessor | Stratified split | Class proportions are preserved across splits |
-| U11 | Preprocessor | Handle infinity and NaN | Invalid values are cleaned without errors |
-| U12 | Metrics | Confusion matrix and accuracy | Hand-computed values match expected results |
-| U13 | Metrics | ROC-AUC | AUC is one for a perfect ranker and about a half for random scores |
-| U14 | Enforcement Policy | Every attack type has a policy | All attack classes map to a defined action |
-| U15 | Allowlist | Private and public IPs | Private/trusted IPs are allowed; public IPs are not |
-| U16 | JWT Handler | Create and verify token | Valid token returns correct claims (username, role, expiry) |
-| U17 | JWT Handler | Expired token | Verification returns null; token is rejected |
-| U18 | JWT Handler | Tampered or wrong-secret token | Verification detects tampering and rejects the token |
-| U19 | User Store | Seed default users | Three default users (admin, operator, viewer) are created on first run |
-| U20 | User Store | Authenticate with correct/wrong password | Correct password returns the user; wrong password returns null |
-| U21 | User Store | Create, delete, update password | User CRUD operations succeed and persist across reloads |
+| U1 | Decision Tree | Fit and predict on separable data | Labels reproduced; probabilities sum to one |
+| U2 | Decision Tree | Gini and entropy criteria | Both yield valid, consistent splits |
+| U3 | Random Forest | Out-of-bag score and importances | Score in [0, 1]; importances non-negative and sum to one |
+| U4 | MLP | Fit, predict, early stopping | Learns the data; stops when validation stops improving |
+| U5 | Isolation Forest | Outlier scoring | Clear outliers receive high anomaly scores |
+| U6 | Ensemble | Fusion and override | Combined verdict with per-component detail |
+| U7 | Preprocessor | Stratified split; infinity and NaN handling | Class proportions preserved; invalid values cleaned |
+| U8 | Metrics | Confusion matrix, F1, ROC-AUC | Match hand-computed values; AUC = 1 for a perfect ranker |
+| U9 | Dataset loader | Label mapping | *Attempted* flows dropped; *Infiltration – Portscan* mapped to PortScan |
+| U10 | Capture | Payload and header semantics | TCP payload = IP length − headers; header = transport only; padding ignored |
+| U11 | Capture | Flow termination | Flow closes on RST or on FIN in both directions |
+| U12 | Capture | Active/idle accounting | 5 s threshold; active period ends at the last packet before the gap |
+| U13 | Capture | Zero-duration flow | Byte and packet rates reported as 0 |
+| U14 | Capture | In-flight classification | Long-lived flow classified without eviction; no duplicate verdict without growth |
+| U15 | Enforcement policy | Every attack class has a policy | All classes map to an action, duration and threshold |
+| U16 | Allowlist | Private and public addresses | Trusted networks allowed; others not |
+| U17 | JWT handler | Create, verify, expire, tamper | Valid claims returned; expired or altered tokens rejected |
+| U18 | User store | Seed, authenticate, create, delete, change password | Defaults created; wrong password rejected; changes persist |
 
 ### 4.2.2 Test Cases for System Testing
 
-System tests verify that the components work correctly together through the API and the enforcement workflow. A representative selection is shown in Table 4.3.
-
+::: {custom-style="FigureCenter"}
 **Table 4.3: System / Integration Test Cases**
+:::
 
 | ID | Scenario | Test Case | Expected Result |
 | --- | --- | --- | --- |
-| S1 | API health | Call the health endpoint | Returns status, version, and model-loaded flag |
-| S2 | Detection | Submit a benign flow | Classified as benign; no alert generated |
-| S3 | Detection | Submit a DDoS-like flow | Classified as an attack; an alert is created |
-| S4 | Batch detection | Submit mixed traffic in one batch | Correct per-flow results and alert count |
-| S5 | Alerts | List alerts after attacks | Recent alerts are returned and filterable |
-| S6 | Enforcement | High-confidence attack with source IP | Source IP is blocked |
-| S7 | Enforcement | Low-confidence attack | No block is applied |
-| S8 | Allowlist | Attack from a trusted/private IP | IP is never blocked |
-| S9 | Enforcement | Same attacking IP seen twice | IP is blocked only once (no duplicates) |
-| S10 | Block lifecycle | Block then unblock an IP | Block is created and then successfully removed |
-| S11 | Capacity | Exceed the maximum-blocks limit | Further blocks are refused safely |
-| S12 | Traffic simulation | Run a realistic traffic mix | Alerts and statistics reflect the traffic |
-| S13 | Auth login | Login with valid credentials | Returns JWT token with username and role |
-| S14 | Auth login | Login with invalid credentials | Returns 401 Unauthorized |
-| S15 | RBAC | Access protected endpoint without token | Returns 401 Unauthorized |
-| S16 | RBAC | Viewer accesses stats (read-only) | Returns 200 OK |
-| S17 | RBAC | Viewer submits flow for classification | Returns 403 Forbidden |
-| S18 | RBAC | Operator submits flow for classification | Returns 200 OK |
-| S19 | User management | Admin creates, lists, and deletes users | Operations succeed with correct responses |
-| S20 | User management | Non-admin attempts user management | Returns 403 Forbidden |
-| S21 | Password change | User changes own password | Succeeds; old password no longer works |
-| S22 | Public endpoints | Health, ready, metrics without auth | All return 200 without any authentication |
+| S1 | Health | Call health and readiness endpoints | Status, version and model-loaded flag returned |
+| S2 | Detection | Submit a benign flow | Classified benign; no alert |
+| S3 | Detection | Submit a real DDoS flow from the dataset | Classified as an attack; alert created |
+| S4 | Batch | Submit a mixed batch | One result per flow and an alert count |
+| S5 | Alerts | List and filter after attacks | Recent alerts returned; severity filter works |
+| S6 | Enforcement | High-confidence attack with source address | Address blocked with the policy's action and duration |
+| S7 | Enforcement | Low-confidence attack | No block applied |
+| S8 | Allowlist | Attack from a trusted address | Never blocked |
+| S9 | Enforcement | Same attacker seen twice | Blocked once |
+| S10 | Block lifecycle | Block, list, unblock, flush | Records created and removed |
+| S11 | Capacity | Exceed the block cap | Further blocks refused safely |
+| S12 | Simulation | Replay a traffic mix | Alerts and statistics reflect the traffic |
+| S13 | Authentication | Valid and invalid login | Token with role, or 401 |
+| S14 | RBAC | Protected endpoint without token | 401 |
+| S15 | RBAC | Viewer reads statistics; Viewer submits a flow | 200; 403 |
+| S16 | RBAC | Administrator submits a flow; non-admin manages users | 200; 403 |
+| S17 | Users | Administrator creates, lists, deletes | Operations succeed |
+| S18 | Password | User changes own password | Old password no longer works |
+| S19 | Public | Health, readiness, metrics without token | 200 |
 
-All 141 tests (105 original plus 36 authentication tests) pass in the project's continuous-integration pipeline, which automatically lints the code, runs the full test suite, and builds the container image on every change.
+All **150 tests pass**. The continuous-integration pipeline lints the code, runs the suite and builds the container image on every change.
 
 ## 4.3 Result Analysis
 
-All models were trained and evaluated on a labelled subset of the real-world CIC-IDS2017 dataset, comprising 66,721 network flows, each described by thirty flow-level features and belonging to one of seven classes. The classes were balanced during loading so that the rarer attack types were not overwhelmed by the majority traffic. The data was split so that the models were evaluated on a held-out test set of 13,344 flows that they had never seen during training. The complete pipeline — data loading, training of all models, evaluation, and report generation — finished in about six minutes on a standard laptop. Table 4.4 summarizes the overall performance of each model.
+### 4.3.1 Training Data
 
-**Table 4.4: Overall Model Performance on the Test Set**
+The models were trained on the corrected CIC-IDS2017 dataset published by Liu, Engelen et al. [14]: about 2.1 million flows re-extracted from the original packet captures with a fixed CICFlowMeter and relabelled. Three rules were applied when loading it:
 
-| Model | Accuracy | Macro F1 | Avg. Inference Time |
-| --- | --- | --- | --- |
-| Random Forest | 99.39% | 98.90% | ~0.35 ms/flow |
-| Multi-Layer Perceptron | 98.42% | 97.84% | ~0.002 ms/flow |
-| Ensemble | 99.27% | 98.57% | ~0.48 ms/flow |
-| Isolation Forest (anomaly, binary) | 74.71% accuracy | ROC-AUC 0.86 | — |
+- Flows labelled *Attempted* — attack traffic that never exhibited malicious behaviour (no payload sent, closed port, tool start-up artefacts) — were **dropped**. The dataset's authors state that they must not be treated as a separate label; training on them as attacks teaches the model that every failed connection is hostile, and training on them as benign hides real attack shapes.
+- The port scan launched from the infiltrated host (*Infiltration – Portscan*) was labelled **PortScan**, by behaviour rather than by campaign.
+- The DoS and DDoS tools and Heartbleed form one **DDoS** class; FTP and SSH password guessing form **BruteForce**; the three web attacks form **WebAttack**.
 
-The supervised models and the ensemble all reached very high accuracy. The Random Forest was the strongest single classifier on these tabular features, and the MLP was extremely fast at prediction time. The ensemble closely matched the Random Forest while adding the Isolation Forest's ability to flag unusual traffic. The Isolation Forest, judged only on its own as a benign-versus-attack detector, scored lower — which is expected, because its role in the system is not to classify known attacks but to catch unusual flows that the supervised models might otherwise pass as benign.
-
-Table 4.5 breaks down the ensemble's performance for each individual class.
-
-**Table 4.5: Per-Class Performance of the Ensemble Model**
-
-| Class | Precision | Recall | F1-Score |
-| --- | --- | --- | --- |
-| BENIGN | 0.989 | 0.995 | 0.992 |
-| DDoS | 0.999 | 0.993 | 0.996 |
-| PortScan | 1.000 | 0.975 | 0.987 |
-| BruteForce | 0.998 | 0.996 | 0.997 |
-| Botnet | 1.000 | 1.000 | 1.000 |
-| Infiltration | 1.000 | 1.000 | 1.000 |
-| WebAttack | 0.920 | 0.935 | 0.927 |
-
-The per-class results show that the system performs strongly across every attack type; even the low-volume classes such as Botnet and Infiltration are detected perfectly. The Web Attack class records the lowest score (an F1 of about 0.93), because a small number of web-attack flows are statistically very close to ordinary web traffic. The confusion matrix in Figure 4.1 shows exactly how the test flows were classified.
+Exact duplicate rows were removed before splitting, so no test flow has a twin in the training set (port-scan probes are nearly identical, and 230,000 raw rows collapse to 7,498 unique ones). BENIGN was capped at 150,000 rows and DDoS at 50,000; the other classes were used in full. Table 4.4 shows the result; the split was 70 % training, 10 % validation and 20 % test, stratified by class.
 
 ::: {custom-style="FigureCenter"}
-![](/Users/portpro/Documents/netsentry 3/docs/figures/confusion.png){width=5.2in}
+**Table 4.4: Composition of the Training Data**
+:::
+
+| Class | Flows | Share | Test rows |
+| --- | ---: | ---: | ---: |
+| BENIGN | 150,000 | 69.7 % | 30,000 |
+| DDoS | 50,000 | 23.2 % | 10,000 |
+| PortScan | 7,498 | 3.5 % | 1,500 |
+| BruteForce | 6,933 | 3.2 % | 1,387 |
+| Botnet | 736 | 0.3 % | 147 |
+| WebAttack | 104 | < 0.1 % | 21 |
+| Infiltration | 36 | < 0.1 % | 7 |
+| **Total** | **215,307** | **100 %** | **43,062** |
+
+No synthetic rows were used. The complete pipeline — loading 2.1 million rows, deduplication, training all models with eight worker processes and evaluation — took about six minutes on a ten-core laptop.
+
+### 4.3.2 Overall Performance
+
+::: {custom-style="FigureCenter"}
+**Table 4.5: Overall Model Performance on the Test Split (43,062 flows)**
+:::
+
+| Model | Accuracy | Macro F1 | False-positive rate | Detection rate | Inference | Training |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Random Forest | 99.94 % | 96.9 % | 0.03 % | 99.86 % | 0.36 ms/flow | 262 s |
+| Multi-Layer Perceptron | 99.83 % | 89.9 % | 0.11 % | 99.69 % | 0.001 ms/flow | 27 s |
+| **Ensemble (RF 0.9 / MLP 0.1)** | **99.94 %** | **97.3 %** | **0.03 %** | **99.86 %** | 0.51 ms/flow | — |
+| Isolation Forest (benign vs anomaly) | 86.3 % | F1 0.73 | — | ROC-AUC 0.939 | — | 16 s |
+
+The Random Forest is the strongest single model. The MLP is almost as accurate overall but weaker on the rare classes, which drags its macro-F1 down. The ensemble weights were therefore chosen on the *validation* split, never on the test split: at the original 0.6/0.4 weighting the ensemble's macro-F1 was 0.905 and its Infiltration recall 0.29; at 0.9/0.1 the validation macro-F1 was highest, and on the test split the ensemble then reached 0.973 while keeping the false-positive rate at 0.03 % — nine benign flows out of thirty thousand. The Isolation Forest, judged alone as a benign-versus-attack detector, is deliberately weaker: its job is not to classify known attacks but to catch unusual flows the supervised models would pass as benign.
+
+### 4.3.3 Per-Class Performance
+
+::: {custom-style="FigureCenter"}
+**Table 4.6: Per-Class Performance of the Ensemble Model**
+:::
+
+| Class | Precision | Recall | F1-Score | Test rows |
+| --- | ---: | ---: | ---: | ---: |
+| BENIGN | 0.999 | 1.000 | 1.000 | 30,000 |
+| DDoS | 1.000 | 1.000 | 1.000 | 10,000 |
+| PortScan | 0.995 | 0.996 | 0.996 | 1,500 |
+| BruteForce | 0.999 | 0.996 | 0.997 | 1,387 |
+| Botnet | 1.000 | 1.000 | 1.000 | 147 |
+| Infiltration | 1.000 | 0.857 | 0.923 | 7 |
+| WebAttack | 1.000 | 0.810 | 0.895 | 21 |
+
+The five well-represented classes are separated almost perfectly. The two rare classes are the honest weak points: one of seven Infiltration flows and four of twenty-one Web Attack flows were read as benign. With so few real examples these figures are indicative only, and the report makes no stronger claim for them. Figure 4.1 shows every classification of the test split.
+
+::: {custom-style="FigureCenter"}
+![](figures/confusion.png){width=6.0in}
 :::
 
 ::: {custom-style="FigureCenter"}
-**Figure 4.1: Ensemble Confusion Matrix (Test Set)**
+**Figure 4.1: Ensemble Confusion Matrix on the Held-Out Test Split**
 :::
 
-Almost every flow lies on the diagonal, meaning it was classified correctly. The small number of errors are concentrated between the BENIGN and Web Attack classes — a few normal flows are flagged as web attacks and a few web attacks are read as normal — because some web-application requests are statistically very close to ordinary web traffic. A handful of DDoS and Port Scan flows are also predicted as benign. These results confirm that the from-scratch ensemble meets the project's accuracy goal while remaining fast enough for real-time use and fully transparent in its decisions.
+Of the 43,062 test flows, 43,035 lie on the diagonal. The off-diagonal cells are small and explainable: nine benign flows were flagged (seven as PortScan, two as BruteForce), and eighteen attack flows were missed, all of them read as benign — one DDoS, six PortScan, six BruteForce, one Infiltration and four WebAttack. No attack was confused with a *different* attack class.
+
+### 4.3.4 Effect of Training-Data Quality
+
+The project's first model had been trained on a widely circulated 15 % subsample of the original CIC-IDS2017 CSVs. That subsample contained 26 real PortScan flows, 2 Botnet flows and no Infiltration flows at all; the loader padded each class to 1,000 rows with synthetic data, and the model reported 99.4 % accuracy on its own split. Table 4.7 and Figure 4.2 show what happened when both models were scored on the same 43,062 real held-out flows of the corrected dataset.
+
+::: {custom-style="FigureCenter"}
+**Table 4.7: Previous versus Retrained Model on Identical Held-Out Flows**
+:::
+
+| Metric | Previous model | Retrained model |
+| --- | ---: | ---: |
+| Accuracy | 69.1 % | 99.94 % |
+| False-positive rate | 35.8 % | 0.03 % |
+| Detection rate | 98.3 % | 99.86 % |
+| Recall — BENIGN | 64.2 % | 99.97 % |
+| Recall — DDoS | 91.4 % | 99.99 % |
+| Recall — PortScan | 80.1 % | 99.60 % |
+| Recall — BruteForce | 0.0 % | 99.57 % |
+| Recall — Botnet | 95.9 % | 100 % |
+| Recall — Infiltration | 100 % (7 rows) | 85.7 % (7 rows) |
+| Recall — WebAttack | 0.0 % | 81.0 % |
+
+::: {custom-style="FigureCenter"}
+![](figures/compare.png){width=6.0in}
+:::
+
+::: {custom-style="FigureCenter"}
+**Figure 4.2: Per-Class Recall of the Previous and the Retrained Model**
+:::
+
+The previous model flagged more than a third of real benign traffic as attacks and recognised no Brute Force or Web Attack flows; its published accuracy measured how well it had learned the synthetic generator, not real attacks. Nothing about the algorithms changed between the two rows of Table 4.7 — only the data. This is the project's most important empirical result: for intrusion detection, the provenance and labelling of the training data decide detection quality more than model choice does, which is exactly the caution raised in the literature [12], [14], [15].
+
+### 4.3.5 Live Operation
+
+With the retrained model loaded, the API classifies a flow in about half a millisecond (median 1.3 ms end to end including request handling), pushes each verdict to the dashboard as it is made, and rate-limits or blocks attacking addresses under the policy in Table 3.2. Replaying real dataset flows through the running service reproduced the test-split accuracy, and the aligned feature extractor closes verdicts on scan probes as soon as the reply packet arrives instead of after a 30-second idle timeout.
 
 ```{=openxml}
 <w:p><w:r><w:br w:type="page"/></w:r></w:p>
@@ -821,27 +861,21 @@ Almost every flow lies on the diagonal, meaning it was classified correctly. The
 
 ## 5.1 Conclusion
 
-This project set out to build a complete, transparent, and deployable Network Intrusion Detection System using machine-learning models written entirely from first principles. All of the objectives were met. Four core algorithms — a decision tree, a Random Forest, a Multi-Layer Perceptron, and an Isolation Forest — were implemented using only the NumPy library, and were combined into an ensemble that fuses the strengths of supervised classification with anomaly detection. The ensemble classifies network flows into normal traffic and six attack types with very high accuracy (about 99.3% overall and a macro-averaged F1-score of about 98.6%), while keeping the average prediction time to roughly half a millisecond per flow.
+This project set out to build a transparent, deployable, machine-learning network intrusion detection system and to evaluate it honestly. All objectives were met. Four learning algorithms — decision tree, Random Forest, Multi-Layer Perceptron and Isolation Forest — were implemented in NumPy alone and fused into an ensemble that classifies flows into benign traffic and six attack classes with 99.94 % accuracy, a 97.3 % macro-F1, a 0.03 % false-positive rate and a 99.86 % detection rate on 43,062 real held-out flows, at about half a millisecond per flow.
 
-Beyond the models, the project delivered a full operational system rather than an isolated experiment. It includes a data and training pipeline, a real-time inference engine, a REST API, an operator dashboard, structured logging, monitoring metrics, a severity-based alerting subsystem, an optional enforcement layer that can automatically and safely block malicious sources, and a complete authentication and authorization system. The authentication layer — including JWT token signing (HMAC-SHA256) and password hashing (PBKDF2-SHA256) — was also implemented from scratch using only the Python standard library, extending the project's transparency philosophy beyond machine learning to security. Three user roles (Administrator, Operator, Viewer) provide role-based access control across all API endpoints, and a login page integrates authentication into the operator dashboard. The system is containerized and covered by an automated test suite of 141 tests and a continuous-integration pipeline.
+The detector runs as a complete service: live packet capture whose features match the training data exactly, a REST API, a WebSocket-driven dashboard, severity-ranked alerts, Prometheus metrics, a policy-driven enforcement layer with safety controls, JWT authentication with two roles, containers, and 150 automated tests.
 
-The most important outcome is the demonstration that hand-built, fully auditable implementations — of both machine-learning models and security primitives — can reach the same high quality usually associated with large external libraries, while remaining transparent enough for a security analyst to understand and trust every decision. This combination of accuracy, transparency, and production-readiness is the central contribution of the NIDS project.
+The most valuable lesson came from evaluation. A model trained on a small, synthetically padded subsample had looked excellent on its own split and failed on real traffic; rebuilding the data pipeline around the corrected CIC-IDS2017 dataset and aligning the live feature extractor with the dataset's conventions turned a 36 % false-positive rate into 0.03 % without changing a single algorithm. Transparent models made this diagnosis possible, and correct data made the system work.
 
 ## 5.2 Future Recommendations
 
-While the project achieved its goals, several enhancements could extend its value:
-
-1. **Training on large-scale real traffic.** Although the pipeline already supports importing real public datasets, future work could train and validate the system on large volumes of live or recorded production traffic to further confirm its real-world performance.
-
-2. **Online and incremental learning.** The models are currently trained offline. Adding the ability to update the models continuously as new traffic arrives would help the system adapt to changing attack patterns without a full retraining cycle.
-
-3. **Direct integration with traffic sensors.** Building ready-made connectors to common flow-extraction tools would allow the system to consume live network traffic directly, removing the need for an external feeding step.
-
-4. **Distributed and high-availability deployment.** Replacing the in-process rate limiter with a shared store and adding load balancing across many nodes would allow the system to protect very large networks.
-
-5. **Richer explainability and analyst tools.** Future work could add per-prediction explanations and trend visualizations to the dashboard to help analysts investigate incidents more quickly.
-
-6. **Expanded attack coverage and adversarial robustness.** Adding more attack categories and testing the models against deliberately crafted evasive traffic would make the system more comprehensive and resilient.
+1. **Cross-dataset validation.** Score the model on the corrected CSE-CIC-IDS2018 dataset and on locally captured traffic to measure how far the results transfer beyond one testbed, and retrain on the union if the drop is large.
+2. **More real examples of rare attacks.** Infiltration and Web Attack have too few real flows; adding traffic from newer datasets or controlled lab captures would make their figures meaningful.
+3. **Online and incremental learning.** Let the models update from newly labelled flows without a full retraining cycle.
+4. **Encrypted-traffic features.** Add TLS handshake metadata to the feature set so that some application-level attacks become visible without payload inspection.
+5. **Per-alert explanations.** Attach Random Forest feature importances and the anomaly components to each alert on the dashboard.
+6. **Distributed deployment.** Move the rate limiter and block state to a shared store and add load balancing so several detector nodes can protect a large network.
+7. **Adversarial robustness.** Test the detector against traffic deliberately shaped to evade flow-level features and harden it accordingly.
 
 ```{=openxml}
 <w:p><w:r><w:br w:type="page"/></w:r></w:p>
@@ -871,7 +905,35 @@ While the project achieved its goals, several enhancements could extend its valu
 
 [11] I. Sharafaldin, A. H. Lashkari, and A. A. Ghorbani, "Toward Generating a New Intrusion Detection Dataset and Intrusion Traffic Characterization," in *Proc. International Conference on Information Systems Security and Privacy (ICISSP)*, 2018, pp. 108–116.
 
-[12] R. Sommer and V. Paxson, "Outside the Closed World: On Using Machine Learning for Network Intrusion Detection," in *Proc. IEEE Symposium on Security and Privacy*, 2010, pp. 305–316.
+[12] G. Engelen, V. Rimmer, and W. Joosen, "Troubleshooting an Intrusion Detection Dataset: the CICIDS2017 Case Study," in *Proc. IEEE Security and Privacy Workshops (SPW)*, 2021, pp. 7–12.
+
+[13] M. Lanvin, P.-F. Gimenez, Y. Han, F. Majorczyk, L. Mé, and E. Totel, "Errors in the CICIDS2017 Dataset and the Significant Differences in Detection Performances It Makes," in *Risks and Security of Internet and Systems (CRiSIS 2022)*, LNCS vol. 13857, Springer, 2023.
+
+[14] L. Liu, G. Engelen, T. Lynar, D. Essam, and W. Joosen, "Error Prevalence in NIDS Datasets: A Case Study on CIC-IDS-2017 and CSE-CIC-IDS-2018," in *Proc. IEEE Conference on Communications and Network Security (CNS)*, 2022. Corrected datasets: https://intrusion-detection.distrinet-research.be/CNS2022/
+
+[15] R. Sommer and V. Paxson, "Outside the Closed World: On Using Machine Learning for Network Intrusion Detection," in *Proc. IEEE Symposium on Security and Privacy*, 2010, pp. 305–316.
+
+[16] M. Cantone, C. Marrocco, and A. Bria, "Machine Learning in Network Intrusion Detection: A Cross-Dataset Generalization Study," *IEEE Access*, vol. 12, 2024. Preprint: arXiv:2402.10974, "On the Cross-Dataset Generalization of Machine Learning for Network Intrusion Detection."
+
+[17] A. H. Lashkari, G. Draper-Gil, M. S. I. Mamun, and A. A. Ghorbani, "Characterization of Tor Traffic Using Time Based Features," in *Proc. ICISSP*, 2017 — the CICFlowMeter feature extractor used for the CIC-IDS datasets.
+
+```{=openxml}
+<w:p><w:r><w:br w:type="page"/></w:r></w:p>
+```
+
+# Bibliography
+
+Sources studied during the project but not cited in the text:
+
+- Canadian Institute for Cybersecurity, *CICFlowMeter* source code and documentation, https://github.com/ahlashkari/CICFlowMeter
+- S. Ramírez, *FastAPI documentation*, https://fastapi.tiangolo.com/
+- P. Biondi et al., *Scapy documentation*, https://scapy.readthedocs.io/
+- C. R. Harris et al., "Array programming with NumPy," *Nature*, vol. 585, pp. 357–362, 2020, and the NumPy reference, https://numpy.org/doc/
+- M. Jones, J. Bradley, and N. Sakimura, "JSON Web Token (JWT)," IETF RFC 7519, 2015.
+- K. Moriarty, B. Kaliski, and A. Rusch, "PKCS #5: Password-Based Cryptography Specification Version 2.1," IETF RFC 8018, 2017.
+- Prometheus Authors, *Exposition formats*, https://prometheus.io/docs/instrumenting/exposition_formats/
+- Netfilter Project, *nftables wiki*, https://wiki.nftables.org/
+- Docker Inc., *Docker Compose documentation*, https://docs.docker.com/compose/
 
 ```{=openxml}
 <w:p><w:r><w:br w:type="page"/></w:r></w:p>
@@ -879,7 +941,151 @@ While the project achieved its goals, several enhancements could extend its valu
 
 # Appendices
 
-**Appendix A — Selected Source Code.** *(Insert key source listings here, e.g. `src/models/random_forest.py`, `src/models/ensemble.py`, and `src/inference/engine.py`.)*
+**Appendix A — Selected Source Code.** Three listings, copied verbatim from the code base, that carry the report's central claims: the ensemble decision rule, the CICFlowMeter-aligned packet parser, and the decision-tree split search that every Random Forest tree is built from.
 
-**Appendix B — Screenshots.** *(Insert screenshots of the operator dashboard, the API documentation page, the prediction response, and the monitoring/Grafana dashboard here.)*
+*Listing A.1 — `src/models/ensemble.py`: weighted soft vote and anomaly override.*
+
+```python
+def predict_proba(self, X: np.ndarray) -> np.ndarray:
+    self._check_components()
+    X = np.asarray(X, dtype=np.float64)
+    if X.ndim == 1:
+        X = X.reshape(1, -1)
+
+    rf_proba = self.rf.predict_proba(X)
+    mlp_proba = self.mlp.predict_proba(X)
+    total_w = self.rf_weight + self.mlp_weight
+    combined = (self.rf_weight * rf_proba + self.mlp_weight * mlp_proba) / total_w
+    return combined
+
+def predict(self, X: np.ndarray) -> np.ndarray:
+    self._check_components()
+    X = np.asarray(X, dtype=np.float64)
+    if X.ndim == 1:
+        X = X.reshape(1, -1)
+
+    proba = self.predict_proba(X)
+    base_pred = np.argmax(proba, axis=1)
+
+    # Anomaly override: IF must flag strongly AND the supervised models
+    # must have non-trivial attack probability. Without the second check,
+    # normal traffic that looks slightly unusual gets misclassified.
+    anomaly_scores = self.iso.anomaly_score(X)
+    for i in range(X.shape[0]):
+        if base_pred[i] == self.benign_class and anomaly_scores[i] >= self.anomaly_boost:
+            non_benign = np.arange(proba.shape[1]) != self.benign_class
+            if non_benign.any():
+                attack_prob = proba[i, non_benign].max()
+                # ponytail: only override if supervised models give >=15%
+                # attack probability — prevents IF from overriding high-confidence
+                # benign predictions. Raise threshold if FP still too high.
+                if attack_prob >= 0.15:
+                    idx_pool = np.where(non_benign)[0]
+                    best = idx_pool[np.argmax(proba[i, non_benign])]
+                    base_pred[i] = best
+
+    return base_pred.astype(np.int64)
+```
+
+*Listing A.2 — `src/capture/sniffer.py`: reducing a captured packet to CICFlowMeter fields.*
+
+```python
+def parse_packet(pkt) -> Optional[tuple]:
+    """Reduce a scapy packet to CICFlowMeter-style fields.
+
+    Returns (src_ip, dst_ip, src_port, dst_port, proto, payload_len,
+             header_len, tcp_flags, win_size, timestamp) or None for non-IP.
+    payload_len is derived from the IP total length so Ethernet padding on
+    tiny frames is never counted.
+    """
+    if not pkt.haslayer(IP):
+        return None
+    ip = pkt[IP]
+    ip_hdr = ip.ihl * 4
+    ip_total = ip.len if ip.len is not None else len(ip)
+    src_port = dst_port = 0
+    tcp_flags = win_size = 0
+
+    if pkt.haslayer(TCP):
+        tcp = pkt[TCP]
+        src_port, dst_port = tcp.sport, tcp.dport
+        tcp_flags = int(tcp.flags)
+        win_size = tcp.window
+        header_len = (tcp.dataofs or 5) * 4
+    elif pkt.haslayer(UDP):
+        udp = pkt[UDP]
+        src_port, dst_port = udp.sport, udp.dport
+        header_len = 8
+    else:
+        header_len = 0
+
+    payload_len = max(0, ip_total - ip_hdr - header_len)
+    return (ip.src, ip.dst, src_port, dst_port, int(ip.proto),
+            payload_len, header_len, tcp_flags, win_size, float(pkt.time))
+
+
+# ── Flow accumulator ─────────────────────────────────────────────────────
+
+@dataclass
+```
+
+*Listing A.3 — `src/models/decision_tree.py`: Gini impurity and the best-split search.*
+
+```python
+def _gini(class_counts: np.ndarray) -> float:
+    total = class_counts.sum()
+    if total == 0:
+        return 0.0
+    probs = class_counts / total
+    return float(1.0 - np.sum(probs * probs))
+
+@staticmethod
+
+def _best_split(
+    self, X: np.ndarray, y: np.ndarray
+```
+
+**Appendix B — Screenshots of the Running System.** Captured from the NIDS build described in this report (the user interface carries the implementation's code name, *NetSentry*) while replaying real dataset flows through the API. Live packet capture was stopped, so the packet table is empty; the pipeline counters, verdict feed, alerts and blocks come from the replay. The dashboard's "response time" (6.6 ms) is measured per HTTP request and includes request handling, alert creation and enforcement, whereas the 0.5 ms figure in Chapter 4 is model inference alone.
+
+::: {custom-style="FigureCenter"}
+![](figures/screen_login.png){width=6.0in}
+:::
+
+::: {custom-style="FigureCenter"}
+**Figure B.1: Login page with the two seeded roles (Administrator, Viewer)**
+:::
+
+::: {custom-style="FigureCenter"}
+![](figures/screen_dashboard.png){width=6.0in}
+:::
+
+::: {custom-style="FigureCenter"}
+**Figure B.2: Operator dashboard — capture control, detection-pipeline counters and live traffic monitor**
+:::
+
+::: {custom-style="FigureCenter"}
+![](figures/screen_dashboard_panels.png){width=6.0in}
+:::
+
+::: {custom-style="FigureCenter"}
+**Figure B.3: Dashboard panels — threat and severity breakdown, Try-it probe, blocked IPs and top source IPs**
+:::
+
+::: {custom-style="FigureCenter"}
+![](figures/screen_api_docs.png){width=6.0in}
+:::
+
+::: {custom-style="FigureCenter"}
+**Figure B.4: Interactive API documentation generated from the FastAPI schemas**
+:::
+
+**Appendix C — Reproducing the Results.**
+
+```
+make download-data          # corrected CIC-IDS2017 (343 MB zip) -> data/cic-ids2017-improved/
+make train-real             # load, clean, train RF + MLP + IF, evaluate (about 6 minutes)
+python -m scripts.tune_ensemble             # choose vote weights on the validation split
+python -m scripts.compare_models --old <previous artifacts> --new models_artifacts
+sudo python -m scripts.run_server           # API + dashboard on :8000 (root for live capture)
+```
 
