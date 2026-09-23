@@ -2,13 +2,13 @@
 Lightweight Prometheus-style metrics exporter — no external dependencies.
 
 Exposes:
-    netsentry_predictions_total{result="attack|benign"}
-    netsentry_alerts_total{severity="low|medium|high|critical"}
-    netsentry_prediction_latency_ms_bucket{le="..."}
-    netsentry_prediction_latency_ms_sum
-    netsentry_prediction_latency_ms_count
-    netsentry_http_requests_total{route,status}
-    netsentry_up
+    nids_predictions_total{result="attack|benign"}
+    nids_alerts_total{severity="low|medium|high|critical"}
+    nids_prediction_latency_ms_bucket{le="..."}
+    nids_prediction_latency_ms_sum
+    nids_prediction_latency_ms_count
+    nids_http_requests_total{route,status}
+    nids_up
 
 Implemented from scratch so we don't need to pull in prometheus_client as a
 runtime dependency. Output format matches the text-based exposition spec
@@ -35,7 +35,7 @@ class MetricsRegistry:
         self.histogram_totals: dict[tuple, int] = {}
         self.gauges: dict[tuple, float] = {}
         # Register baseline gauge
-        self.set_gauge("netsentry_up", 1)
+        self.set_gauge("nids_up", 1)
 
     # ------------------------------------------------------------------
     @staticmethod

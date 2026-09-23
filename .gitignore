@@ -34,7 +34,7 @@ htmlcov/
 .DS_Store
 Thumbs.db
 
-# NetSentry runtime artifacts — never committed
+# NIDS runtime artifacts — never committed
 data/*.csv
 data/*.npz
 data/*.json

@@ -1,4 +1,4 @@
-"""REST API for NetSentry."""
+"""REST API for NIDS."""
 
 from .app import VERSION, create_app
 

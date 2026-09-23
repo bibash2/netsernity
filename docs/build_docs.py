@@ -21,7 +21,7 @@ from pathlib import Path
 DOCS = Path(__file__).resolve().parent
 ROOT = DOCS.parent
 REFERENCE = DOCS / "reference.docx"
-DOCUMENTS = ["NetSentry_Project_Report", "API", "ARCHITECTURE", "DEPLOYMENT", "MODELS"]
+DOCUMENTS = ["NIDS_Project_Report", "API", "ARCHITECTURE", "DEPLOYMENT", "MODELS"]
 
 
 def postprocess(docx: Path) -> None:

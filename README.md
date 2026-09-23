@@ -1,8 +1,8 @@
-# NetSentry
+# NIDS
 
 **A production-grade Network Intrusion Detection System with machine-learning models written from scratch in NumPy.**
 
-NetSentry detects network intrusions (DDoS, port scans, brute-force, botnets, infiltration, web attacks) in real time using an ensemble of three classifiers — a Random Forest, a Multi-Layer Perceptron, and an Isolation Forest — **all implemented from mathematical first principles without any pre-built ML libraries**. Around that core the project ships a complete production stack: REST API, operator dashboard, Prometheus metrics, structured logging, Docker images, Kubernetes manifests, Nginx reverse proxy, and CI/CD.
+NIDS detects network intrusions (DDoS, port scans, brute-force, botnets, infiltration, web attacks) in real time using an ensemble of three classifiers — a Random Forest, a Multi-Layer Perceptron, and an Isolation Forest — **all implemented from mathematical first principles without any pre-built ML libraries**. Around that core the project ships a complete production stack: REST API, operator dashboard, Prometheus metrics, structured logging, Docker images, Kubernetes manifests, Nginx reverse proxy, and CI/CD.
 
 ---
 
@@ -27,7 +27,7 @@ NetSentry detects network intrusions (DDoS, port scans, brute-force, botnets, in
 
 ## Why this project
 
-A typical student NIDS project calls `sklearn.ensemble.RandomForestClassifier` and prints an accuracy number. NetSentry does the opposite: **every model is implemented from the math upward**. There is no scikit-learn, no XGBoost, no LightGBM, no PyTorch. A decision tree splits on Gini impurity computed by hand. A neural network trains with backpropagation and Adam written out line by line. An isolation forest scores anomalies using the exact path-length formula from the 2008 ICDM paper.
+A typical student NIDS project calls `sklearn.ensemble.RandomForestClassifier` and prints an accuracy number. NIDS does the opposite: **every model is implemented from the math upward**. There is no scikit-learn, no XGBoost, no LightGBM, no PyTorch. A decision tree splits on Gini impurity computed by hand. A neural network trains with backpropagation and Adam written out line by line. An isolation forest scores anomalies using the exact path-length formula from the 2008 ICDM paper.
 
 Around those models is a full production harness — because an ML model without deployment, monitoring, or alerting is not a system. You can go from a clean checkout to a running API with a live threat dashboard in under five minutes on a laptop.
 
@@ -116,7 +116,7 @@ Reproduce: `make train-real` (downloads the 343 MB corrected dataset, trains, wr
 
 ```bash
 git clone <repo>
-cd netsentry
+cd nids
 pip install -r requirements.txt
 make demo            # trains on 20k flows, then starts the API on :8000
 ```
@@ -146,7 +146,7 @@ curl -X POST http://localhost:8000/api/v1/predict \
 ## Project layout
 
 ```
-netsentry/
+nids/
 ├── src/
 │   ├── models/              ← From-scratch ML models (NumPy only)
 │   │   ├── base.py            BaseModel abstract interface
@@ -181,12 +181,12 @@ netsentry/
 
 ## Configuration
 
-Every tunable lives in `config/config.yaml`. Any field can be overridden with an environment variable of the form `NETSENTRY_<SECTION>__<KEY>` (double underscore). Examples:
+Every tunable lives in `config/config.yaml`. Any field can be overridden with an environment variable of the form `NIDS_<SECTION>__<KEY>` (double underscore). Examples:
 
 ```bash
-NETSENTRY_DATA__N_SAMPLES=100000 python -m scripts.train_pipeline
-NETSENTRY_API__PORT=9090 python -m scripts.run_server
-NETSENTRY_API__API_KEY=$(openssl rand -hex 32) python -m scripts.run_server
+NIDS_DATA__N_SAMPLES=100000 python -m scripts.train_pipeline
+NIDS_API__PORT=9090 python -m scripts.run_server
+NIDS_API__API_KEY=$(openssl rand -hex 32) python -m scripts.run_server
 ```
 
 See `.env.example` for the full list.
@@ -234,11 +234,11 @@ A live operator console runs at `/`. It polls `/stats` and `/alerts` every 2.5 s
 
 The API exports Prometheus metrics without any external client library. Out of the box you get:
 
-- `netsentry_predictions_total{result="attack|benign"}` — prediction counts
-- `netsentry_alerts_total{severity="low|medium|high|critical"}` — alert counts
-- `netsentry_prediction_latency_ms_bucket{le="..."}` — p50/p95/p99 latency histogram
-- `netsentry_http_requests_total{route,status}` — request rate per route
-- `netsentry_up` — service up gauge
+- `nids_predictions_total{result="attack|benign"}` — prediction counts
+- `nids_alerts_total{severity="low|medium|high|critical"}` — alert counts
+- `nids_prediction_latency_ms_bucket{le="..."}` — p50/p95/p99 latency histogram
+- `nids_http_requests_total{route,status}` — request rate per route
+- `nids_up` — service up gauge
 
 `docker-compose` brings up Prometheus and Grafana pre-wired to scrape these.
 

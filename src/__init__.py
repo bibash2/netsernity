@@ -1,7 +1,7 @@
-"""NetSentry — Network Intrusion Detection System (from-scratch ML)."""
+"""NIDS — Network Intrusion Detection System (from-scratch ML)."""
 
 __version__ = "1.0.0"
-__author__ = "NetSentry Project"
+__author__ = "NIDS Project"
 
 from . import capture, data, inference, models, monitoring, training, utils
 

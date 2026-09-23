@@ -3,7 +3,7 @@
 
 Each figure is laid out in inches at the width it occupies on the A4 page
 (6.0 in between the report margins) and rendered at 300 dpi, so an 8 pt label
-here prints as 8 pt in Word — no more shrinking a 2800 px diagram to 6 in.
+here prints as 8 pt in Word: no more shrinking a 2800 px diagram to 6 in.
 
     python docs/figures/make_figures.py            # all figures
     python docs/figures/make_figures.py arch class # selected figures
@@ -24,14 +24,12 @@ ROOT = Path(__file__).resolve().parents[2]
 OUT = Path(__file__).resolve().parent
 DPI = 300
 W = 6.0  # printable width in inches
-plt.rcParams.update({"font.family": "DejaVu Sans", "font.size": 8})
+plt.rcParams.update({"font.family": "Times New Roman", "font.size": 9, "text.color": "#000000", "axes.labelcolor": "#000000", "xtick.color": "#000000", "ytick.color": "#000000", "axes.edgecolor": "#000000"})
+FS_MIN = 7.0  # nothing smaller than 7 pt on paper
 
-INK, LINE, MUTED = "#111827", "#374151", "#6b7280"
-C = {  # (fill, border) — muted, print-friendly
-    "blue": ("#dbeafe", "#1d4ed8"), "indigo": ("#e0e7ff", "#4338ca"), "purple": ("#ede9fe", "#6d28d9"),
-    "green": ("#dcfce7", "#15803d"), "orange": ("#ffedd5", "#c2410c"), "red": ("#fee2e2", "#b91c1c"),
-    "grey": ("#f3f4f6", "#4b5563"), "yellow": ("#fef9c3", "#a16207"), "white": ("#ffffff", "#374151"),
-    "teal": ("#ccfbf1", "#0f766e"),
+INK, LINE, MUTED = "#000000", "#111111", "#2b2b2b"   # print-safe: black text, no faded greys
+C = {  # black and white only: white fill, black outline
+    k: ("#ffffff", "#000000") for k in ("blue", "indigo", "purple", "green", "orange", "red", "grey", "yellow", "white", "teal")
 }
 LH = lambda fs: fs / 72 * 1.45  # line height in inches for a font size in points
 
@@ -45,8 +43,12 @@ def canvas(h):
 
 
 def save(fig, name, pad_in=0.06):
-    """Save at 300 dpi, then trim the white border (keeping `pad_in` inches) so the
-    drawing itself fills the width it is embedded at in the report."""
+    """Enforce the print minimum font size, save at 300 dpi, then trim the white
+    border (keeping `pad_in` inches) so the drawing fills its embed width."""
+    import matplotlib.text
+    for txt in fig.findobj(matplotlib.text.Text):
+        if txt.get_fontsize() < FS_MIN:
+            txt.set_fontsize(FS_MIN)
     out = OUT / name
     fig.savefig(out, dpi=DPI, facecolor="white")
     plt.close(fig)
@@ -65,7 +67,7 @@ def bh(n_lines, ts=8.5, bs=7.0, title=True):
     return 0.1 + (LH(ts) if title else 0) + n_lines * LH(bs) + 0.1
 
 
-def box(ax, x, y, w, h, title=None, lines=(), color="white", ts=8.5, bs=7.0, r=0.06, lw=1.1, ls="-", tc=None):
+def box(ax, x, y, w, h, title=None, lines=(), color="white", ts=8.5, bs=7.0, r=0.06, lw=1.3, ls="-", tc=None):
     fc, ec = C[color]
     ax.add_patch(FancyBboxPatch((x, y), w, h, boxstyle=f"round,pad=0,rounding_size={r}", fc=fc, ec=ec, lw=lw, ls=ls))
     cx = x + w / 2
@@ -88,7 +90,7 @@ def label(ax, x, y, text, fs=6.8, color=LINE, bold=False, ha="center", va="cente
             bbox=dict(boxstyle=f"round,pad={pad}", fc=bg, ec="none") if bg else None)
 
 
-def arrow(ax, p, q, color=LINE, ls="-", lw=1.0, style="-|>", ms=9, rad=0.0, hollow=False, text=None, tpos=0.5, toff=(0, 0.08), fs=6.8):
+def arrow(ax, p, q, color=LINE, ls="-", lw=1.2, style="-|>", ms=9, rad=0.0, hollow=False, text=None, tpos=0.5, toff=(0, 0.08), fs=6.8):
     a = FancyArrowPatch(p, q, arrowstyle=style, mutation_scale=ms, lw=lw, ec=color,
                         fc="white" if hollow else color, ls=ls, connectionstyle=f"arc3,rad={rad}", shrinkA=0, shrinkB=0)
     ax.add_patch(a)
@@ -96,7 +98,7 @@ def arrow(ax, p, q, color=LINE, ls="-", lw=1.0, style="-|>", ms=9, rad=0.0, holl
         label(ax, p[0] + (q[0] - p[0]) * tpos + toff[0], p[1] + (q[1] - p[1]) * tpos + toff[1], text, fs=fs)
 
 
-def path(ax, pts, color=LINE, ls="-", lw=1.0, head=True, ms=9, hollow=False, text=None, tpt=None, fs=6.8):
+def path(ax, pts, color=LINE, ls="-", lw=1.2, head=True, ms=9, hollow=False, text=None, tpt=None, fs=6.8):
     xs, ys = zip(*pts)
     n = len(pts) - 1 if head else len(pts)
     ax.plot(xs[:n], ys[:n], color=color, ls=ls, lw=lw, solid_capstyle="round")
@@ -108,7 +110,7 @@ def path(ax, pts, color=LINE, ls="-", lw=1.0, head=True, ms=9, hollow=False, tex
 
 def group(ax, x, y, w, h, title, color, fs=8.2):
     _, ec = C[color]
-    ax.add_patch(FancyBboxPatch((x, y), w, h, boxstyle="round,pad=0,rounding_size=0.1", fc="#fbfbfc", ec=ec, lw=1.0, ls=(0, (4, 3))))
+    ax.add_patch(FancyBboxPatch((x, y), w, h, boxstyle="round,pad=0,rounding_size=0.1", fc="#ffffff", ec=ec, lw=1.0, ls=(0, (4, 3))))
     ax.text(x + 0.12, y + h - 0.06, title, ha="left", va="top", fontsize=fs, fontweight="bold", color=ec)
 
 
@@ -194,54 +196,44 @@ def component(ax, x, y, w, h, title, lines=(), color="grey", ts=8, bs=6.7):
     return dict(x=x, y=y, w=w, h=h, cx=cx, cy=y + h / 2, top=y + h, bottom=y, left=x, right=x + w)
 
 
-# ── Figure 3.1 — use case ───────────────────────────────────────────────────
+# ── Figure 3.1: use case ───────────────────────────────────────────────────
+
 
 def fig_usecase():
-    H = 8.1
+    H = 6.2
     fig, ax = canvas(H)
-    bx, by, bw, bhh = 1.5, 0.45, 3.1, 6.55
-    ax.add_patch(FancyBboxPatch((bx, by), bw, bhh, boxstyle="round,pad=0,rounding_size=0.12", fc="#f8fafc", ec=INK, lw=1.3))
-    ax.text(bx + bw / 2, by + bhh - 0.1, "NIDS — system boundary", ha="center", va="top", fontsize=9, fontweight="bold")
-
-    login = (3.05, 6.35)
-    usecase(ax, *login, "Login / Authenticate\n(JWT or API key)", w=1.6)
-    colA, colB = 2.25, 3.85
-    A = {
-        "cls1": (colA, 5.55, "Classify single flow\nPOST /predict"),
-        "cls2": (colA, 4.75, "Classify a batch\nPOST /predict/batch"),
-        "cap": (colA, 3.95, "Start / stop live\npacket capture"),
-        "probe": (colA, 3.15, "Probe a flow\n(Try-it panel)"),
-        "clear": (colA, 2.35, "Clear alerts /\nunblock IPs"),
-        "users": (colA, 1.55, "Manage users"),
-        "train": (colA, 0.75, "Train / retrain\nmodels (CLI)"),
+    bx, by, bw, bhh = 1.55, 0.35, 3.0, 5.55
+    ax.add_patch(FancyBboxPatch((bx, by), bw, bhh, boxstyle="round,pad=0,rounding_size=0.12", fc="#ffffff", ec=INK, lw=1.4))
+    ax.text(bx + bw / 2, by + bhh - 0.12, "NIDS", ha="center", va="top", fontsize=10, fontweight="bold")
+    A = {  # left column
+        "login": (2.35, 5.05, "Log in"),
+        "classify": (2.35, 4.25, "Classify traffic\n(single / batch)"),
+        "capture": (2.35, 3.45, "Start / stop\nlive capture"),
+        "users": (2.35, 2.65, "Manage users"),
+        "train": (2.35, 1.85, "Train models"),
     }
-    B = {
-        "live": (colB, 5.55, "View live traffic\n& verdicts"),
-        "alerts": (colB, 4.75, "View & filter\nalerts"),
-        "blocked": (colB, 3.95, "View blocked IPs /\ntop source IPs"),
-        "stats": (colB, 3.15, "View metrics &\nsystem statistics"),
-        "pwd": (colB, 2.35, "Change own\npassword"),
+    B = {  # right column
+        "verdicts": (3.75, 4.25, "View live verdicts\nand alerts"),
+        "blocked": (3.75, 3.45, "View blocked IPs\nand statistics"),
+        "password": (3.75, 2.65, "Change own\npassword"),
     }
     for x, y, t in list(A.values()) + list(B.values()):
-        usecase(ax, x, y, t, fs=7.0)
-
-    ext = (0.7, 5.1); adm = (0.7, 1.95); vwr = (5.35, 4.0)
-    actor(ax, *ext, "External System /\nTraffic Sensor"); actor(ax, *adm, "Administrator"); actor(ax, *vwr, "Viewer\n(Security Analyst)")
+        usecase(ax, x, y, t, w=1.25, h=0.5, fs=8)
+    ext = (0.7, 4.3); adm = (0.7, 1.7); vwr = (5.35, 3.3)
+    actor(ax, *ext, "External System"); actor(ax, *adm, "Administrator"); actor(ax, *vwr, "Viewer")
     ek = (ext[0] + 0.12, ext[1] + 0.3); ak = (adm[0] + 0.12, adm[1] + 0.3); vk = (vwr[0] - 0.12, vwr[1] + 0.3)
-    for k in ("cls1", "cls2"):
-        x, y, _ = A[k]; ax.plot([ek[0], x - 0.66], [ek[1], y], color=INK, lw=0.9)
-    ax.plot([ek[0], login[0] - 0.8], [ek[1], login[1]], color=INK, lw=0.9)
-    for k in ("cap", "probe", "clear", "users", "train"):
-        x, y, _ = A[k]; ax.plot([ak[0], x - 0.66], [ak[1], y], color=INK, lw=0.9)
+    for k in ("login", "classify"):
+        x, y, _ = A[k]; ax.plot([ek[0], x - 0.62], [ek[1], y], color=INK, lw=1.0)
+    for k in ("capture", "users", "train"):
+        x, y, _ = A[k]; ax.plot([ak[0], x - 0.62], [ak[1], y], color=INK, lw=1.0)
     for k in B:
-        x, y, _ = B[k]; ax.plot([vk[0], x + 0.66], [vk[1], y], color=INK, lw=0.9)
-    ax.plot([vk[0], login[0] + 0.8], [vk[1], login[1]], color=INK, lw=0.9)
-    # actor generalisation: Administrator inherits every Viewer use case
-    path(ax, [(adm[0], adm[1] - 0.45), (adm[0], 0.16), (vwr[0], 0.16), (vwr[0], vwr[1] - 0.5)], color=INK, lw=0.9, hollow=True, ms=11)
-    label(ax, 3.05, 0.16, "«Administrator inherits all Viewer use cases»", fs=6.8, bg="white")
+        x, y, _ = B[k]; ax.plot([vk[0], x + 0.62], [vk[1], y], color=INK, lw=1.0)
+    ax.plot([vk[0], A["login"][0] + 0.62], [vk[1], A["login"][1]], color=INK, lw=1.0)
+    path(ax, [(adm[0], adm[1] - 0.45), (adm[0], 0.12), (vwr[0], 0.12), (vwr[0], vwr[1] - 0.5)], color=INK, lw=1.0, hollow=True, ms=11)
+    label(ax, 3.05, 0.12, "Administrator inherits all Viewer use cases", fs=7.5, bg="white")
     save(fig, "usecase.png")
 
-# ── Figure 3.2 — class diagram ─────────────────────────────────────────────
+# ── Figure 3.2: class diagram ─────────────────────────────────────────────
 def gen_arrow(ax, child, parent_pt):
     """UML generalisation: hollow triangle at the parent."""
     arrow(ax, (child["cx"], child["top"]), parent_pt, hollow=True, ms=12, lw=0.9)
@@ -306,7 +298,7 @@ def fig_class():
         gen_arrow(ax, b, (fb["left"] + 0.2 + i * 0.6, fb["bottom"]))
     save(fig, "class.png")
 
-# ── Figure 3.3 — object diagram ────────────────────────────────────────────
+# ── Figure 3.3: object diagram ────────────────────────────────────────────
 def obj(ax, x, y_top, w, title, slots, color):
     lh = LH(6.6)
     h = 0.24 + len(slots) * lh + 0.1
@@ -339,7 +331,7 @@ def fig_object():
     label(ax, 1.05, 0.8, "Snapshot while one real DDoS flow from the\ncorrected CIC-IDS2017 test set is processed.", fs=6.8, bg=None)
     save(fig, "object.png")
 
-# ── Figure 3.4 — state diagram ─────────────────────────────────────────────
+# ── Figure 3.4: state diagram ─────────────────────────────────────────────
 
 def fig_state():
     H = 3.6
@@ -349,13 +341,13 @@ def fig_state():
     box(ax, 3.75, 0.3, 1.95, 0.92, "BLOCKED / DROPPED", ["BruteForce · Botnet", "Infiltration · DDoS  ·  TTL 24 h"], color="red", bs=6.4)
     terminal(ax, 0.35, 1.8); arrow(ax, (0.44, 1.8), (1.05, 1.8), text="first packet seen", toff=(0, 0.1), fs=6.4)
     arrow(ax, (2.75, 2.02), (3.75, 2.78), fs=6.3)
-    label(ax, 2.85, 2.72, "attack ∧ confidence ≥ threshold\n∧ not allowlisted ∧ not already limited", fs=6.2)
+    label(ax, 2.85, 2.72, "attack and confidence ≥ threshold\nand not allowlisted and not already limited", fs=6.2)
     arrow(ax, (3.75, 2.52), (2.75, 1.9), ls="--")
-    label(ax, 3.5, 2.06, "expires ∨ unblocked", fs=6.2)
+    label(ax, 3.5, 2.06, "expires or unblocked", fs=6.2)
     arrow(ax, (2.75, 1.58), (3.75, 0.92), fs=6.3)
-    label(ax, 2.85, 0.86, "attack ∧ confidence ≥ threshold\n∧ not allowlisted ∧ under block cap", fs=6.2)
+    label(ax, 2.85, 0.86, "attack and confidence ≥ threshold\nand not allowlisted and under block cap", fs=6.2)
     arrow(ax, (3.75, 1.12), (2.75, 1.7), ls="--")
-    label(ax, 3.5, 1.56, "expires ∨ unblocked", fs=6.2)
+    label(ax, 3.5, 1.56, "expires or unblocked", fs=6.2)
     terminal(ax, 5.75, 1.8, end=True)
     path(ax, [(4.72, 2.45), (4.72, 1.8), (5.62, 1.8)], ls="--")
     path(ax, [(4.72, 1.22), (4.72, 1.8)], ls="--", head=False)
@@ -363,7 +355,7 @@ def fig_state():
     label(ax, 3.0, 0.1, "Thresholds come from the per-attack response policy (0.80–0.90) and the global gate min_confidence_to_enforce = 0.85.", fs=6.0, bg=None)
     save(fig, "state.png")
 
-# ── Figure 3.5 — sequence diagram ──────────────────────────────────────────
+# ── Figure 3.5: sequence diagram ──────────────────────────────────────────
 
 def fig_sequence():
     H = 6.5
@@ -374,7 +366,7 @@ def fig_sequence():
     for x, n in zip(xs, names):
         box(ax, x - 0.34, top - 0.42, 0.68, 0.42, color="indigo")
         ax.text(x, top - 0.21, n, ha="center", va="center", fontsize=6.6, fontweight="bold", linespacing=1.1)
-        ax.plot([x, x], [top - 0.42, bottom], color=MUTED, lw=0.8, ls=(0, (3, 3)))
+        ax.plot([x, x], [top - 0.42, bottom], color="#444444", lw=0.9, ls=(0, (3, 3)), zorder=0.5)  # behind notes/boxes
     cl, rt, en, pr, es, am, rx, db = xs
 
     def msg(y, a, b, text, ret=False, fs=6.4):
@@ -411,7 +403,7 @@ def fig_sequence():
     label(ax, 3.0, 0.12, "Solid = synchronous call · dashed = return or asynchronous push.  Flows from the live sniffer follow the same path from predict() onward.", fs=6.0, bg=None)
     save(fig, "sequence.png")
 
-# ── Figure 3.6 — activity diagram ──────────────────────────────────────────
+# ── Figure 3.6: activity diagram ──────────────────────────────────────────
 def fig_activity():
     H = 9.2
     fig, ax = canvas(H)
@@ -429,7 +421,7 @@ def fig_activity():
     act(6.5, ["Build feature vector; clean ±∞/NaN;", "z-score with training-set statistics"]); arrow(ax, (cx, 6.25), (cx, 6.13))
     act(5.88, ["Random Forest + MLP soft vote", "P = 0.9·P_RF + 0.1·P_MLP"], color="indigo"); arrow(ax, (cx, 5.63), (cx, 5.51))
     act(5.26, ["Isolation Forest anomaly score", "(trained on benign flows only)"], color="green"); arrow(ax, (cx, 5.01), (cx, 4.87))
-    diamond(ax, cx, 4.45, 2.7, 0.8, "benign vote ∧ anomaly ≥ 0.9\n∧ max attack prob ≥ 0.15 ?")
+    diamond(ax, cx, 4.45, 2.7, 0.8, "benign vote and anomaly ≥ 0.9\nand max attack prob ≥ 0.15 ?")
     box(ax, 0.2, 4.2, 1.35, 0.5, lines=["Override → most likely", "attack class (zero-day guard)"], color="yellow", bs=6.6)
     arrow(ax, (cx - 1.35, 4.45), (1.55, 4.45), text="yes", toff=(0, 0.08))
     arrow(ax, (cx, 4.05), (cx, 3.9), text="no", toff=(0.18, 0))
@@ -439,7 +431,7 @@ def fig_activity():
     arrow(ax, (cx + 0.675, 3.6), (4.45, 3.6), text="no", toff=(0, 0.08))
     arrow(ax, (cx, 3.3), (cx, 3.15), text="yes", toff=(0.18, 0))
     act(2.9, ["Create alert: severity + recommended action;", "append alerts.jsonl; push to dashboard"], color="orange"); arrow(ax, (cx, 2.65), (cx, 2.48))
-    diamond(ax, cx, 2.05, 3.3, 0.86, "enforcement on ∧ confidence ≥ policy threshold\n∧ not allowlisted ∧ not already blocked\n∧ below block cap ?")
+    diamond(ax, cx, 2.05, 3.3, 0.86, "enforcement on and confidence ≥ policy threshold\nand not allowlisted and not already blocked\nand below block cap ?")
     arrow(ax, (cx, 1.62), (cx, 1.47), text="yes", toff=(0.18, 0))
     act(1.22, ["Apply action via firewall backend", "rate-limit / block / drop with TTL (nftables · log-only)"], color="red", w=3.3)
     arrow(ax, (cx, 0.97), (cx, 0.82))
@@ -450,74 +442,42 @@ def fig_activity():
     save(fig, "activity.png")
 
 
-# ── Figure 3.7 — system architecture ───────────────────────────────────────
+# ── Figure 3.7: system architecture ───────────────────────────────────────
+
 
 def fig_arch():
-    H = 9.2
+    layers = [
+        ("Traffic input layer", ["Live packets from the\nnetwork interface", "Flow records from\nexternal sensors (REST)"]),
+        ("API and security layer", ["REST routes\n(predict, alerts, blocks)", "JWT login and roles\n(admin, viewer)", "Rate limiting and\ninput validation", "WebSocket push\nto the dashboard"]),
+        ("Detection layer", ["Preprocessor\n(clean, scale)", "Random Forest + MLP\nweighted vote", "Isolation Forest\nanomaly override", "Verdict: class,\nconfidence, anomaly"]),
+        ("Response layer", ["Alert manager\n(severity, action)", "Enforcement\n(rate-limit, block, drop)", "Dashboard, metrics\nand logs"]),
+        ("Data and training layer", ["Corrected CIC-IDS2017\ndataset", "Training pipeline\n(RF, MLP, IF, tuning)", "Model artifacts\nloaded at start-up"]),
+    ]
+    LH_, GAP, TOP = 1.02, 0.34, 0.15
+    H = TOP + len(layers) * LH_ + (len(layers) - 1) * GAP + 0.1
     fig, ax = canvas(H)
-    # inputs
-    group(ax, 0.12, 8.3, 5.76, 0.82, "INPUTS", "grey")
-    i1 = box(ax, 0.3, 8.38, 1.7, 0.56, "Monitored network", ["live packets on the host NIC / mirror port"], color="white", bs=6.4, ts=8)
-    i2 = box(ax, 2.15, 8.38, 1.7, 0.56, "External sensors / clients", ["JSON flow records over HTTPS"], color="white", bs=6.4, ts=8)
-    i3 = box(ax, 4.0, 8.38, 1.7, 0.56, "Security analyst", ["browser, JWT login (admin | viewer)"], color="white", bs=6.4, ts=8)
-    # edge & API
-    group(ax, 0.12, 6.5, 5.76, 1.42, "EDGE & API LAYER — FastAPI · Uvicorn", "blue")
-    e1 = box(ax, 0.3, 6.62, 1.3, 0.98, "Packet Sniffer", ["scapy capture thread", "bidirectional 5-tuple flows", "CICFlowMeter-exact features", "RST / FIN close · 120 s cut"], color="blue", bs=6.2, ts=7.6)
-    e2 = box(ax, 1.72, 6.62, 1.3, 0.98, "REST routes", ["/predict · /predict/batch", "/alerts · /blocked · /stats", "/capture/start|stop", "Pydantic validation"], color="blue", bs=6.2, ts=7.6)
-    e3 = box(ax, 3.14, 6.62, 1.3, 0.98, "Auth & limits", ["JWT (HMAC-SHA256, 24 h)", "PBKDF2-SHA256 passwords", "RBAC admin | viewer", "240 req/min sliding limit"], color="blue", bs=6.2, ts=7.6)
-    e4 = box(ax, 4.56, 6.62, 1.3, 0.98, "Dashboard + WS hub", ["live traffic table · verdict feed", "detection pipeline animation", "top source IPs · blocked IPs", "Try-it probe · capture control"], color="blue", bs=6.2, ts=7.6)
-    arrow(ax, (i1[0] + 0.85, 8.38), (e1[0] + 0.65, 7.6), text="raw packets", toff=(0.4, 0.13))
-    arrow(ax, (i2[0] + 0.85, 8.38), (e2[0] + 0.65, 7.6), text="POST", toff=(0.28, 0.13))
-    arrow(ax, (i3[0] + 0.85, 8.38), (e4[0] + 0.65, 7.6), text="HTTPS / WSS", toff=(0.42, 0.13))
-    # detection core (row A leaves a corridor at x > 5.45 for the live-feed line)
-    group(ax, 0.12, 4.42, 5.76, 1.92, "DETECTION CORE — every model written from scratch in NumPy", "indigo")
-    d0 = box(ax, 0.3, 5.34, 1.2, 0.68, "Preprocessor", ["clean ±∞ / NaN, clip", "z-score (train stats)"], color="grey", bs=6.2, ts=7.6)
-    d1 = box(ax, 1.6, 5.34, 1.2, 0.68, "Random Forest", ["150 trees · depth 20", "vote weight 0.9"], color="purple", bs=6.2, ts=7.6)
-    d2 = box(ax, 2.9, 5.34, 1.2, 0.68, "MLP 256-128-64", ["Adam · dropout · early stop", "vote weight 0.1"], color="purple", bs=6.2, ts=7.6)
-    d3 = box(ax, 4.2, 5.34, 1.2, 0.68, "Isolation Forest", ["150 trees, benign only", "anomaly score ∈ [0, 1]"], color="green", bs=6.2, ts=7.6)
-    d4 = box(ax, 0.3, 4.55, 3.3, 0.6, "EnsembleNIDS", ["weighted soft vote + anomaly override (score ≥ 0.9 ∧ attack prob ≥ 0.15)"], color="indigo", bs=6.2)
-    d5 = box(ax, 3.75, 4.55, 1.65, 0.6, "Verdict", ["class · confidence · anomaly", "per-class probabilities"], color="white", bs=6.2)
-    arrow(ax, (d0[0] + 0.6, 6.62), (d0[0] + 0.6, 6.02))
-    arrow(ax, (e2[0] + 0.65, 6.62), (e2[0] + 0.65, 6.02))
-    label(ax, 3.9, 6.42, "30 flow features (µs, payload bytes, flags, rates)", fs=6.2)
-    arrow(ax, (d0[0] + 1.2, 5.68), (d1[0], 5.68), ms=7)
-    for d in (d1, d2, d3):
-        arrow(ax, (d[0] + 0.6, 5.34), (min(d[0] + 0.6, 3.4), 5.15), ms=7)
-    arrow(ax, (d4[0] + 3.3, 4.85), (d5[0], 4.85), ms=8)
-    # live feed: every verdict goes to the dashboard over WebSocket (corridor x = 5.65)
-    path(ax, [(d5[0] + 1.65, 4.85), (5.65, 4.85), (5.65, 6.62)], ls="--", ms=8)
-    ax.text(5.76, 5.75, "verdicts → WebSocket live feed", rotation=90, ha="center", va="center", fontsize=6.0, color=LINE)
-    # alerting & response
-    group(ax, 0.12, 2.86, 5.76, 1.4, "ALERTING & RESPONSE (optional IPS mode)", "orange")
-    a1 = box(ax, 0.3, 2.98, 1.7, 0.98, "AlertManager", ["severity + recommended action", "ring buffer of 1 000 alerts", "alerts.jsonl · /alerts API"], color="orange", bs=6.3)
-    a2 = box(ax, 2.15, 2.98, 1.7, 0.98, "ResponseExecutor", ["per-attack policy (Table 3.2)", "confidence gate · allowlist", "dedup · 10 000-block cap"], color="red", bs=6.3)
-    a3 = box(ax, 4.0, 2.98, 1.86, 0.98, "Firewall backend", ["nftables (Linux) · log-only · noop", "rate-limit 1 h / block · drop 24 h", "dry-run mode"], color="red", bs=6.3)
-    path(ax, [(d5[0] + 0.8, 4.55), (d5[0] + 0.8, 4.36), (a1[0] + 0.85, 4.36), (a1[0] + 0.85, 3.96)], text="if attack", tpt=(2.7, 4.36))
-    arrow(ax, (a1[0] + 1.7, 3.47), (a2[0], 3.47), ms=8, text="enforce()", toff=(0, 0.09), fs=6.2)
-    arrow(ax, (a2[0] + 1.7, 3.47), (a3[0], 3.47), ms=8)
-    # observability
-    group(ax, 0.12, 1.62, 2.85, 1.1, "OBSERVABILITY", "green")
-    o1 = box(ax, 0.25, 1.74, 1.28, 0.6, "Metrics registry", ["/metrics (Prometheus text)"], color="green", bs=6.2, ts=7.4)
-    o2 = box(ax, 1.62, 1.74, 1.28, 0.6, "Prometheus + Grafana", ["scrape · dashboards"], color="green", bs=6.2, ts=7.4)
-    arrow(ax, (o1[0] + 1.28, 2.04), (o2[0], 2.04), ms=7)
-    path(ax, [(0.89, 2.98), (0.89, 2.34)], ls="--", ms=7, text="counters · latency", tpt=(1.62, 2.78), fs=6.0)
-    box(ax, 0.25, 0.95, 2.65, 0.52, "Structured JSON logs", ["request ids · rotating files"], color="green", bs=6.2, ts=7.4)
-    # offline training
-    group(ax, 3.1, 0.15, 2.78, 2.57, "OFFLINE TRAINING PIPELINE", "purple")
-    t1 = box(ax, 3.25, 1.98, 2.48, 0.5, "Corrected CIC-IDS2017 dataset", ["Liu, Engelen et al. 2022 · 2.1 M labelled flows"], color="white", bs=6.2, ts=7.4)
-    t2 = box(ax, 3.25, 1.32, 2.48, 0.5, "Dataset loader", ["drop 'Attempted' flows · dedup · class caps → 215 k"], color="purple", bs=6.2, ts=7.4)
-    t3 = box(ax, 3.25, 0.66, 2.48, 0.5, "TrainingPipeline", ["fit RF · MLP · IF · tune vote weights on validation"], color="purple", bs=6.2, ts=7.4)
-    arrow(ax, (4.49, 1.98), (4.49, 1.82), ms=7); arrow(ax, (4.49, 1.32), (4.49, 1.16), ms=7)
-    box(ax, 3.25, 0.24, 2.48, 0.3, lines=["artifacts: ensemble.pkl · preprocessor.pkl · metrics report"], color="grey", bs=6.0)
-    path(ax, [(5.73, 0.39), (5.95, 0.39), (5.95, 4.95), (5.88, 4.95)], ls="--", ms=7)
-    label(ax, 5.95, 2.4, "loaded at start-up", fs=5.6, bg="white")
-    ax.texts[-1].set_rotation(90)
-    # legend
-    ax.plot([0.3, 0.75], [0.6, 0.6], color=LINE, lw=1.0); label(ax, 0.85, 0.6, "synchronous data flow", fs=6.2, bg=None, ha="left")
-    ax.plot([0.3, 0.75], [0.4, 0.4], color=LINE, lw=1.0, ls="--"); label(ax, 0.85, 0.4, "asynchronous / offline", fs=6.2, bg=None, ha="left")
+    y = H - TOP
+    arrows = ["packets / flow records", "30 flow features", "verdict per flow", "trained models (dashed: offline)"]
+    for i, (title, items) in enumerate(layers):
+        y0 = y - LH_
+        ax.add_patch(FancyBboxPatch((0.15, y0), 5.7, LH_, boxstyle="round,pad=0,rounding_size=0.08", fc="white", ec=INK, lw=1.5))
+        ax.text(0.3, y - 0.1, title, ha="left", va="top", fontsize=9.5, fontweight="bold")
+        n = len(items); w = (5.4 - 0.15 * (n - 1)) / n
+        for j, it in enumerate(items):
+            bx = 0.3 + j * (w + 0.15)
+            box(ax, bx, y0 + 0.1, w, 0.52, lines=it.split("\n"), color="white", bs=8, r=0.04, lw=1.1)
+        if i < len(layers) - 1:
+            nxt_top = y0 - GAP
+            if i == len(layers) - 2:   # training layer feeds the detection layer offline
+                path(ax, [(5.3, nxt_top), (5.3, y0)], ls="--", ms=9)
+                label(ax, 4.05, (y0 + nxt_top) / 2, arrows[i], fs=8)
+            else:
+                arrow(ax, (3.0, y0), (3.0, nxt_top), ms=10)
+                label(ax, 3.55, (y0 + nxt_top) / 2, arrows[i], fs=8, bg="white")
+        y = y0 - GAP
     save(fig, "arch.png")
 
-# ── Figure 3.8 — component diagram ─────────────────────────────────────────
+# ── Figure 3.8: component diagram ─────────────────────────────────────────
 
 def fig_component():
     H = 6.1
@@ -550,33 +510,26 @@ def fig_component():
     label(ax, 1.6, 1.75, "- - ▶  «use» dependency", fs=6.5, bg=None)
     save(fig, "component.png")
 
-# ── Figure 3.9 — deployment diagram ────────────────────────────────────────
+# ── Figure 3.9: deployment diagram ────────────────────────────────────────
+
 
 def fig_deployment():
-    H = 5.8
+    H = 3.9
     fig, ax = canvas(H)
-    ax.add_patch(FancyBboxPatch((2.1, 0.25), 3.75, 5.3, boxstyle="round,pad=0,rounding_size=0.12", fc="#f5f7ff", ec=C["blue"][1], lw=1.1, ls=(0, (4, 3))))
-    ax.text(2.25, 5.47, "«execution environment»  Docker Compose host / Kubernetes", ha="left", va="top", fontsize=7.4, fontweight="bold", color=C["blue"][1])
-    node3d(ax, 0.15, 4.2, 1.6, 0.82, "Monitored network", ["mirror port / host NIC", "raw packets"], stereo="«device»")
-    node3d(ax, 0.15, 2.6, 1.6, 0.82, "Analyst workstation", ["browser: dashboard,", "login, live feed"], stereo="«device»")
-    node3d(ax, 0.15, 1.0, 1.6, 0.82, "SOC / SIEM sink", ["alerts.jsonl · webhook", "Grafana alert rules"], stereo="«device»")
-    api = node3d(ax, 2.35, 3.95, 1.95, 1.2, "NIDS API", ["uvicorn workers + InferenceEngine", "PacketSniffer (host network,", "CAP_NET_RAW) · WebSocket hub", "image netsentry:latest"], color="indigo", stereo="«container»")
-    ngx = node3d(ax, 2.35, 2.6, 1.6, 0.82, "nginx 1.27", ["TLS reverse proxy", ":443 → api:8000 (HTTP + WS)"], color="blue", stereo="«container»")
-    prm = node3d(ax, 4.45, 4.33, 1.25, 0.82, "Prometheus", ["+ Grafana 11", "scrape /metrics"], color="green", stereo="«container»")
-    trn = node3d(ax, 4.45, 2.35, 1.25, 0.95, "Trainer job", ["one-shot container", "train_real_data", "(re)writes artifacts"], color="purple", stereo="«container»")
-    node3d(ax, 2.35, 0.5, 3.3, 0.72, "models_artifacts volume", ["ensemble.pkl · preprocessor.pkl · training_metrics.json"], color="grey", stereo="«artifact / volume»")
-    arrow(ax, (1.83, 4.61), (2.35, 4.61), text="packets\n(raw socket)", toff=(0, 0.17), fs=5.8)
-    arrow(ax, (1.83, 3.01), (2.35, 3.01), text="HTTPS /\nWSS", toff=(0, 0.17), fs=5.8)
-    arrow(ax, (3.15, 3.42), (3.15, 3.95), text="proxy", toff=(0.2, 0), fs=6.2)
-    arrow(ax, (4.45, 4.74), (4.38, 4.74), ms=8); label(ax, 4.38, 4.9, "scrape", fs=6.0)
-    arrow(ax, (4.15, 3.95), (4.15, 1.22), ls="--"); label(ax, 4.2, 1.9, "load at\nstart-up", fs=6.0)
-    arrow(ax, (5.07, 2.35), (5.07, 1.22), ls="--", text="write", toff=(0.2, 0), fs=6.2)
-    path(ax, [(2.35, 4.05), (2.0, 4.05), (2.0, 1.41), (1.83, 1.41)], ls="--", ms=8)
-    label(ax, 2.0, 1.95, "alerts /\nwebhooks", fs=6.0)
-    label(ax, 3.0, 0.12, "Live capture needs the API container on the host network with raw-socket capability; nftables enforcement additionally needs a Linux host.", fs=6.0, bg=None)
+    node3d(ax, 0.15, 2.1, 1.45, 1.0, "Monitored network", ["switch mirror port or", "host network interface"], stereo="«device»", ts=8.5, bs=7.5)
+    node3d(ax, 2.05, 1.05, 2.0, 2.3, "NIDS server", ["Docker host"], stereo="«device»", ts=9, bs=7.5)
+    box(ax, 2.2, 2.05, 1.7, 0.72, "NIDS API container", ["FastAPI + inference engine", "packet sniffer, port 8000"], color="white", ts=8, bs=7.2, r=0.04)
+    box(ax, 2.2, 1.2, 1.7, 0.6, "Model artifacts and logs", ["ensemble.pkl, alerts.jsonl"], color="white", ts=8, bs=7.2, r=0.04)
+    node3d(ax, 4.45, 2.1, 1.4, 1.0, "Analyst workstation", ["web browser:", "login and dashboard"], stereo="«device»", ts=8.5, bs=7.5)
+    node3d(ax, 4.45, 0.35, 1.4, 0.8, "Trainer job", ["one-shot container,", "writes model artifacts"], stereo="«container»", ts=8.5, bs=7.5)
+    arrow(ax, (1.68, 2.6), (2.05, 2.6), text="raw packets", toff=(0, 0.13), fs=7.5)
+    arrow(ax, (4.45, 2.6), (4.13, 2.6), text="HTTP / WebSocket", toff=(0, 0.13), fs=7.5)
+    arrow(ax, (2.98, 2.05), (2.98, 1.8), ms=8)
+    path(ax, [(4.45, 0.75), (4.2, 0.75), (4.2, 1.5), (3.9, 1.5)], ls="--", ms=8)
+    label(ax, 4.2, 1.15, "writes", fs=7.5)
     save(fig, "deployment.png")
 
-# ── Figure 4.1 — confusion matrix ──────────────────────────────────────────
+# ── Figure 4.1: confusion matrix ──────────────────────────────────────────
 def load_report():
     p = ROOT / "models_artifacts" / "reports" / "training_metrics.json"
     if p.exists():
@@ -593,7 +546,7 @@ def fig_confusion():
     fig = plt.figure(figsize=(W, 5.6))
     ax = fig.add_axes([0.2, 0.08, 0.76, 0.78])
     shade = np.log10(cm + 1)
-    ax.imshow(shade, cmap="Blues", vmin=0, vmax=shade.max() * 1.15)
+    ax.imshow(shade, cmap="Greys", vmin=0, vmax=shade.max() * 1.25)
     n = len(names)
     for i in range(n):
         for j in range(n):
@@ -601,7 +554,7 @@ def fig_confusion():
             if v == 0:
                 continue
             ax.text(j, i, f"{v:,}", ha="center", va="center", fontsize=8.5 if i == j else 7.5,
-                    fontweight="bold" if i == j else "normal", color="white" if shade[i, j] > shade.max() * 0.6 else INK)
+                    fontweight="bold" if i == j else "normal", color="white" if shade[i, j] > shade.max() * 0.55 else INK)
     ax.set_xticks(range(n)); ax.set_yticks(range(n))
     ax.set_xticklabels(names, fontsize=7.5, rotation=30, ha="right"); ax.set_yticklabels(names, fontsize=7.5)
     ax.set_xticks(np.arange(-0.5, n, 1), minor=True); ax.set_yticks(np.arange(-0.5, n, 1), minor=True)
@@ -609,12 +562,12 @@ def fig_confusion():
     ax.set_xlabel("Predicted class", fontsize=8.5, fontweight="bold", labelpad=6)
     ax.set_ylabel("True class", fontsize=8.5, fontweight="bold", labelpad=6)
     total = int(cm.sum()); correct = int(np.trace(cm))
-    fig.text(0.58, 0.955, f"Ensemble on the held-out test split — {total:,} real flows, {correct:,} correct ({correct / total:.2%})", ha="center", fontsize=8, fontweight="bold")
-    fig.text(0.58, 0.915, "Cell shade is log-scaled so single misclassifications stay visible next to the 30 000 benign flows.", ha="center", fontsize=6.8, color=MUTED)
+    fig.text(0.58, 0.955, f"Ensemble on the held-out test split: {total:,} real flows, {correct:,} correct ({correct / total:.2%})", ha="center", fontsize=8, fontweight="bold")
+    fig.text(0.58, 0.915, "Cell shade is log-scaled so single misclassifications stay visible next to the 30,000 benign flows.", ha="center", fontsize=6.8, color=MUTED)
     save(fig, "confusion.png")
 
 
-# ── Figure 4.2 — old vs new per-class recall ───────────────────────────────
+# ── Figure 4.2: old vs new per-class recall ───────────────────────────────
 def fig_compare():
     names = ["BENIGN", "DDoS", "PortScan", "BruteForce", "Botnet", "Infiltration", "WebAttack"]
     old = [0.6423, 0.9142, 0.8007, 0.0, 0.9592, 1.0, 0.0]
@@ -622,8 +575,8 @@ def fig_compare():
     fig = plt.figure(figsize=(W, 3.9))
     ax = fig.add_axes([0.09, 0.2, 0.89, 0.66])
     xs = np.arange(len(names)); wdt = 0.38
-    b1 = ax.bar(xs - wdt / 2, old, wdt, color="#cbd5e1", edgecolor="#64748b", hatch="///", label="Previous model — 15 % subsample + synthetic padding")
-    b2 = ax.bar(xs + wdt / 2, new, wdt, color="#3b82f6", edgecolor="#1d4ed8", label="Retrained model — corrected CIC-IDS2017, real flows only")
+    b1 = ax.bar(xs - wdt / 2, old, wdt, color="#cbd5e1", edgecolor="#64748b", hatch="///", label="Previous model: 15 % subsample + synthetic padding")
+    b2 = ax.bar(xs + wdt / 2, new, wdt, color="#3b82f6", edgecolor="#1d4ed8", label="Retrained model: corrected CIC-IDS2017, real flows only")
     for bars in (b1, b2):
         for b in bars:
             v = b.get_height()
@@ -641,45 +594,44 @@ def fig_compare():
 
 
 
-# ── Figure 3.2 — Gantt chart (planned schedule, eighth semester) ──────────────
+# ── Figure 3.2: Gantt chart (planned schedule, eighth semester) ──────────────
+
 def fig_gantt():
     tasks = [
-        ("Topic study & project proposal", 1, 3, "grey"),
-        ("Requirement analysis & UML design", 3, 5, "grey"),
-        ("Data pipeline & preprocessing", 5, 6, "blue"),
-        ("From-scratch models: tree, RF, MLP, IF", 6, 8, "purple"),
-        ("Ensemble, training pipeline, evaluation", 8, 9, "purple"),
-        ("REST API, authentication, dashboard", 9, 11, "blue"),
-        ("Alerting, enforcement, monitoring", 11, 12, "orange"),
-        ("Live capture & CICFlowMeter alignment", 12, 13, "teal"),
-        ("Corrected dataset, retraining, result analysis", 13, 14, "indigo"),
-        ("Testing & documentation", 14, 15, "green"),
-        ("Final report & defence preparation", 15, 16, "green"),
+        ("Topic study and project proposal", 1, 3),
+        ("Requirement analysis and UML design", 3, 5),
+        ("Data pipeline and preprocessing", 5, 6),
+        ("Models from scratch: tree, RF, MLP, IF", 6, 8),
+        ("Ensemble, training pipeline, evaluation", 8, 9),
+        ("REST API, authentication, dashboard", 9, 11),
+        ("Alerting, enforcement, monitoring", 11, 12),
+        ("Live capture and feature alignment", 12, 13),
+        ("Corrected dataset, retraining, results", 13, 14),
+        ("Testing and documentation", 14, 15),
+        ("Final report and defence preparation", 15, 16),
     ]
-    milestones = [(3, "Proposal defence"), (12, "Mid-term"), (16, "Final defence")]
-    fig = plt.figure(figsize=(W, 3.6))
-    ax = fig.add_axes([0.42, 0.14, 0.56, 0.74])
-    for i, (name, a, b, col) in enumerate(tasks):
-        fc, ec = C[col]
-        ax.barh(i, b - a, left=a, height=0.62, color=fc, edgecolor=ec, lw=1.0)
-    ax.set_yticks(range(len(tasks))); ax.set_yticklabels([tk[0] for tk in tasks], fontsize=7)
+    milestones = [(3, "Proposal defence", -0.9), (12, "Mid-term defence", -1.7), (16, "Final defence", -0.9)]
+    fig = plt.figure(figsize=(W, 5.0))
+    ax = fig.add_axes([0.40, 0.11, 0.58, 0.78])
+    for i, (name, a, b) in enumerate(tasks):
+        ax.barh(i, b - a, left=a, height=0.62, color="white", edgecolor="black", lw=1.4, hatch="////" if i % 2 else None)
+    ax.set_yticks(range(len(tasks))); ax.set_yticklabels([tk[0] for tk in tasks], fontsize=8.5)
     ax.invert_yaxis()
-    ax.set_xlim(1, 16.6); ax.set_xticks(range(1, 17)); ax.set_xticklabels([str(w) for w in range(1, 17)], fontsize=6.8)
-    ax.set_xlabel("Week of the eighth semester", fontsize=7.5)
-    for wk, lab in milestones:
-        ax.axvline(wk, color=C["red"][1], lw=0.9, ls=(0, (3, 2)))
-        row = -1.55 if lab.startswith("Mid") else -0.75          # stagger so labels never touch
-        ax.text(wk, row, lab, ha="right" if wk >= 15 else "center", va="bottom", fontsize=6.4, color=C["red"][1], fontweight="bold", clip_on=False)
-    ax.grid(axis="x", color="#e5e7eb", lw=0.7); ax.set_axisbelow(True)
+    ax.set_xlim(1, 16.6); ax.set_xticks(range(1, 17)); ax.set_xticklabels([str(w) for w in range(1, 17)], fontsize=8)
+    ax.set_xlabel("Week of the eighth semester", fontsize=9)
+    for wk, lab, row in milestones:
+        ax.axvline(wk, color="black", lw=1.2, ls=(0, (4, 3)))
+        ax.text(wk, row, lab, ha="right" if wk >= 15 else "center", va="bottom", fontsize=8, fontweight="bold", clip_on=False)
+    ax.grid(axis="x", color="#bbbbbb", lw=0.7); ax.set_axisbelow(True)
     for sp in ("top", "right"):
         ax.spines[sp].set_visible(False)
     ax.tick_params(axis="y", length=0)
     save(fig, "gantt.png")
 
 FIGS = {
-    "usecase": fig_usecase, "class": fig_class, "object": fig_object, "state": fig_state, "sequence": fig_sequence,
-    "activity": fig_activity, "arch": fig_arch, "component": fig_component, "deployment": fig_deployment,
-    "confusion": fig_confusion, "compare": fig_compare, "gantt": fig_gantt,
+    "usecase": fig_usecase, "class": fig_class, "state": fig_state, "sequence": fig_sequence,
+    "activity": fig_activity, "arch": fig_arch, "deployment": fig_deployment,
+    "confusion": fig_confusion, "gantt": fig_gantt,
 }
 
 if __name__ == "__main__":

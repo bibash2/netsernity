@@ -1,10 +1,10 @@
-/* NetSentry — Login page logic */
+/* NIDS — Login page logic */
 
 (function () {
-  const TOKEN_KEY = "netsentry_token";
-  const ROLE_KEY = "netsentry_role";
-  const NAME_KEY = "netsentry_name";
-  const USER_KEY = "netsentry_username";
+  const TOKEN_KEY = "nids_token";
+  const ROLE_KEY = "nids_role";
+  const NAME_KEY = "nids_name";
+  const USER_KEY = "nids_username";
 
   // If already logged in, verify token and redirect
   const existing = localStorage.getItem(TOKEN_KEY);

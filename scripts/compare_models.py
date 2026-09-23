@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Compare two sets of NetSentry artifacts on the SAME held-out test split.
+Compare two sets of NIDS artifacts on the SAME held-out test split.
 
 Rebuilds the deterministic stratified split the training pipeline used
 (same dataset CSV, same test/val sizes, same random_state), so both models

@@ -21,7 +21,7 @@ class DataConfig:
     test_size: float = 0.2
     val_size: float = 0.1
     random_state: int = 42
-    dataset_path: str = "data/netsentry_dataset.csv"
+    dataset_path: str = "data/nids_dataset.csv"
 
 
 @dataclass
@@ -70,7 +70,7 @@ class PathsConfig:
 class LoggingConfig:
     level: str = "INFO"
     format: str = "json"
-    file: str = "logs/netsentry.log"
+    file: str = "logs/nids.log"
     rotate_bytes: int = 10_485_760  # 10 MB
     backups: int = 5
 
@@ -83,7 +83,7 @@ class EnforcementConfig:
     min_confidence_to_enforce: float = 0.90
     default_block_duration_seconds: int = 86400  # 24 hours
     max_blocked_ips: int = 10000
-    nftables_table: str = "netsentry"
+    nftables_table: str = "nids"
     nftables_chain: str = "blocked"
     allowlisted_cidrs: list = field(default_factory=lambda: [
         "10.0.0.0/8",
@@ -96,7 +96,7 @@ class EnforcementConfig:
 @dataclass
 class AuthConfig:
     enabled: bool = False
-    jwt_secret: str = "netsentry-change-me-in-production"
+    jwt_secret: str = "nids-change-me-in-production"
     token_expiry_hours: int = 24
     users_file: str = "data/users.json"
 
@@ -125,12 +125,12 @@ def _deep_update(base: dict, overrides: dict) -> dict:
 
 
 def _apply_env_overrides(data: dict) -> dict:
-    """Apply NETSENTRY_*  environment variables.
+    """Apply NIDS_*  environment variables.
 
-    Convention: NETSENTRY_<SECTION>__<KEY>  (double underscore separates section and key).
-    e.g. NETSENTRY_API__PORT=9000 overrides data['api']['port'].
+    Convention: NIDS_<SECTION>__<KEY>  (double underscore separates section and key).
+    e.g. NIDS_API__PORT=9000 overrides data['api']['port'].
     """
-    prefix = "NETSENTRY_"
+    prefix = "NIDS_"
     for key, raw_val in os.environ.items():
         if not key.startswith(prefix):
             continue

@@ -1,4 +1,4 @@
-# NetSentry — Architecture
+# NIDS — Architecture
 
 ## Design principles
 
@@ -9,10 +9,10 @@
 
 ## System context
 
-NetSentry sits between a traffic sensor (Zeek, CICFlowMeter, a packet capture parser, or a production telemetry bus) and a SOC workflow (alerting, ticketing, automated response). This repo implements the detection + alerting service; the sensor and downstream integrations are pluggable at the edges.
+NIDS sits between a traffic sensor (Zeek, CICFlowMeter, a packet capture parser, or a production telemetry bus) and a SOC workflow (alerting, ticketing, automated response). This repo implements the detection + alerting service; the sensor and downstream integrations are pluggable at the edges.
 
 ```
-     network ─► [sensor/flow-extractor] ─► HTTP/Kafka ─► NetSentry ─► [SOC/SOAR]
+     network ─► [sensor/flow-extractor] ─► HTTP/Kafka ─► NIDS ─► [SOC/SOAR]
 ```
 
 A synthetic flow generator is bundled for demos and CI; in production you replace it with real flow records from whatever sensor you use, as long as they follow the 30-feature CIC-IDS schema.
@@ -105,7 +105,7 @@ Latency budget on a laptop with `N_SAMPLES=20000` training: p50 < 1 ms/flow, p95
 
 ## Configuration and secrets
 
-The single source of truth is `config/config.yaml`, loaded once at startup by `src/utils/config.load_config()`. Environment variables of the form `NETSENTRY_<SECTION>__<KEY>` override individual fields at deploy time — so the same image runs in dev, staging, and production without code changes.
+The single source of truth is `config/config.yaml`, loaded once at startup by `src/utils/config.load_config()`. Environment variables of the form `NIDS_<SECTION>__<KEY>` override individual fields at deploy time — so the same image runs in dev, staging, and production without code changes.
 
 Secrets (API keys) are never read from the YAML file in production — they are injected through environment variables or Kubernetes Secrets.
 
@@ -140,7 +140,7 @@ The `src/auth` module implements JWT-based authentication and RBAC entirely from
 
 ## Security considerations
 
-- JWT tokens signed with HMAC-SHA256; secret injected via environment variable in production (`NETSENTRY_AUTH__JWT_SECRET`).
+- JWT tokens signed with HMAC-SHA256; secret injected via environment variable in production (`NIDS_AUTH__JWT_SECRET`).
 - Passwords stored as PBKDF2-SHA256 hashes with 100,000 iterations — never in plain text. User data file excluded from version control via `.gitignore`.
 - API keys validated via constant-time-ish `set` lookup (`src/api/dependencies.py`).
 - Rate limiter is in-process; acceptable for single-node deployments. For horizontal scale, swap the token bucket for Redis — the interface is already isolated.

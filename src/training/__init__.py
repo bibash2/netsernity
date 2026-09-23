@@ -1,4 +1,4 @@
-"""Training orchestration for NetSentry."""
+"""Training orchestration for NIDS."""
 
 from .trainer import TrainingPipeline
 

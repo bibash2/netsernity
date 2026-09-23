@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-NetSentry — training pipeline entry point.
+NIDS — training pipeline entry point.
 
 Runs the end-to-end training workflow and writes all artifacts to disk.
 
@@ -8,7 +8,7 @@ Usage:
     python -m scripts.train_pipeline [--config config/config.yaml] [--samples N]
 
 Env var overrides are supported. For example, to train on a smaller dataset:
-    NETSENTRY_DATA__N_SAMPLES=5000 python -m scripts.train_pipeline
+    NIDS_DATA__N_SAMPLES=5000 python -m scripts.train_pipeline
 """
 
 from __future__ import annotations
@@ -29,7 +29,7 @@ from src.utils.logger import configure_logging, get_logger
 
 
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="NetSentry training pipeline")
+    p = argparse.ArgumentParser(description="NIDS training pipeline")
     p.add_argument("--config", default="config/config.yaml", help="YAML config path")
     p.add_argument("--samples", type=int, default=None, help="Override data.n_samples")
     p.add_argument("--quiet", action="store_true", help="Human console output only")
@@ -50,10 +50,10 @@ def main() -> int:
         rotate_bytes=cfg.logging.rotate_bytes,
         backups=cfg.logging.backups,
     )
-    log = get_logger("netsentry.train")
+    log = get_logger("nids.train")
 
     log.info("=" * 70)
-    log.info("NetSentry Training Pipeline")
+    log.info("NIDS Training Pipeline")
     log.info("Samples: %d  |  Models dir: %s", cfg.data.n_samples, cfg.paths.models_dir)
     log.info("=" * 70)
 

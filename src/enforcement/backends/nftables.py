@@ -1,7 +1,7 @@
 """nftables backend — uses kernel-native sets with timeout for IP blocking.
 
 Requires CAP_NET_ADMIN. The nft commands create an isolated table and set so
-that NetSentry rules never interfere with the host's base firewall policy.
+that NIDS rules never interfere with the host's base firewall policy.
 
 Structure created:
     table inet <table_name> {
@@ -25,7 +25,7 @@ logger = get_logger(__name__)
 class NftablesBackend(FirewallBackend):
     """Block IPs via nftables sets with kernel-managed timeouts."""
 
-    def __init__(self, table_name: str = "netsentry", chain_name: str = "blocked") -> None:
+    def __init__(self, table_name: str = "nids", chain_name: str = "blocked") -> None:
         self._table = table_name
         self._chain = chain_name
 
@@ -37,7 +37,7 @@ class NftablesBackend(FirewallBackend):
         return result
 
     def setup(self) -> None:
-        """Create the netsentry table, set, and chain. Idempotent."""
+        """Create the nids table, set, and chain. Idempotent."""
         # Create table (idempotent via 'add')
         self._run_nft("add", "table", "inet", self._table)
 

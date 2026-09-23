@@ -1,6 +1,6 @@
-# NetSentry — Deployment Runbook
+# NIDS — Deployment Runbook
 
-Practical steps for getting NetSentry from a clean machine to a production cluster. Each section is standalone — you can stop after "local Python" if that's all you need.
+Practical steps for getting NIDS from a clean machine to a production cluster. Each section is standalone — you can stop after "local Python" if that's all you need.
 
 ---
 
@@ -9,7 +9,7 @@ Practical steps for getting NetSentry from a clean machine to a production clust
 Prerequisite: Python 3.10+.
 
 ```bash
-git clone <repo> && cd netsentry
+git clone <repo> && cd nids
 python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 
@@ -43,7 +43,7 @@ Prerequisites: Docker 24+, Docker Compose v2.
 
 ```bash
 cp .env.example .env
-# Optional: set NETSENTRY_API__API_KEY=<openssl rand -hex 32>
+# Optional: set NIDS_API__API_KEY=<openssl rand -hex 32>
 
 cd docker
 docker compose up -d --build
@@ -77,8 +77,8 @@ Prerequisites: a cluster with an ingress controller (nginx-ingress or similar) a
 ### 3.1 Build and push the image
 
 ```bash
-docker build -t your-registry/netsentry:1.0.0 -f docker/Dockerfile .
-docker push your-registry/netsentry:1.0.0
+docker build -t your-registry/nids:1.0.0 -f docker/Dockerfile .
+docker push your-registry/nids:1.0.0
 ```
 
 Update image references in `deployment/kubernetes/deployment.yaml` and `training-job.yaml`.
@@ -94,20 +94,20 @@ kubectl apply -f deployment/kubernetes/deployment.yaml        # API Deployment +
 ### 3.3 Secrets (API key and JWT)
 
 ```bash
-kubectl create secret generic netsentry-secret \
-        --namespace netsentry \
+kubectl create secret generic nids-secret \
+        --namespace nids \
         --from-literal=api-key="$(openssl rand -hex 32)" \
         --from-literal=jwt-secret="$(openssl rand -hex 32)"
 ```
 
-Map the JWT secret to `NETSENTRY_AUTH__JWT_SECRET` in the Deployment env. Absent the secrets, the Deployment's `optional: true` reference still succeeds and auth uses the default dev secret — fine for a private cluster, never for public exposure.
+Map the JWT secret to `NIDS_AUTH__JWT_SECRET` in the Deployment env. Absent the secrets, the Deployment's `optional: true` reference still succeeds and auth uses the default dev secret — fine for a private cluster, never for public exposure.
 
 ### 3.4 Watch progress
 
 ```bash
-kubectl -n netsentry logs -f job/netsentry-trainer
-kubectl -n netsentry rollout status deployment/netsentry-api
-kubectl -n netsentry get hpa
+kubectl -n nids logs -f job/nids-trainer
+kubectl -n nids rollout status deployment/nids-api
+kubectl -n nids get hpa
 ```
 
 The readiness probe hits `/api/v1/ready`, which returns 503 until the model pickles exist on the mounted PVC. No race between training and serving — the `Job → Deployment` dependency is enforced by probes.
@@ -117,15 +117,15 @@ The readiness probe hits `/api/v1/ready`, which returns 503 until the model pick
 The HPA auto-scales 2 → 10 pods on 70% CPU or 80% memory, with a 30 s scale-up window and 300 s scale-down window. For manual overrides:
 
 ```bash
-kubectl -n netsentry scale deployment/netsentry-api --replicas=8
+kubectl -n nids scale deployment/nids-api --replicas=8
 ```
 
 ### 3.6 Weekly retraining
 
-A `CronJob` (`netsentry-retrain`) runs Sundays at 02:00 UTC. It writes fresh artifacts to the same shared volume. Trigger a rolling restart if you want the API to pick them up immediately:
+A `CronJob` (`nids-retrain`) runs Sundays at 02:00 UTC. It writes fresh artifacts to the same shared volume. Trigger a rolling restart if you want the API to pick them up immediately:
 
 ```bash
-kubectl -n netsentry rollout restart deployment/netsentry-api
+kubectl -n nids rollout restart deployment/nids-api
 ```
 
 ---
@@ -137,7 +137,7 @@ kubectl -n netsentry rollout restart deployment/netsentry-api
 Every API request emits a structured JSON log line to stdout, captured by Docker or K8s. Alerts are also appended to `logs/alerts.jsonl` for audit. Example query with `jq`:
 
 ```bash
-kubectl -n netsentry logs deployment/netsentry-api -f | \
+kubectl -n nids logs deployment/nids-api -f | \
     jq 'select(.prediction == "DDoS")'
 ```
 
@@ -147,10 +147,10 @@ Prometheus scrapes `/api/v1/metrics` every 15 s. Key series to alert on:
 
 | Series                                                   | Alert when                    |
 | -------------------------------------------------------- | ----------------------------- |
-| `netsentry_up`                                           | drops to 0                    |
+| `nids_up`                                           | drops to 0                    |
 | `histogram_quantile(0.95, …latency_ms_bucket)`           | exceeds 10 ms                 |
-| `rate(netsentry_alerts_total{severity="critical"}[5m])`  | non-zero for > 2 min          |
-| `rate(netsentry_predictions_total[1m])`                  | falls below baseline (sensor outage) |
+| `rate(nids_alerts_total{severity="critical"}[5m])`  | non-zero for > 2 min          |
+| `rate(nids_predictions_total[1m])`                  | falls below baseline (sensor outage) |
 
 ### Dashboards
 
@@ -163,14 +163,14 @@ Import the Grafana dashboard from `deployment/grafana/` (if shipped) or build pa
 ### Docker
 ```bash
 docker compose down
-docker image tag netsentry:previous netsentry:latest
+docker image tag nids:previous nids:latest
 docker compose up -d
 ```
 
 ### Kubernetes
 ```bash
-kubectl -n netsentry rollout undo deployment/netsentry-api
-kubectl -n netsentry rollout history deployment/netsentry-api
+kubectl -n nids rollout undo deployment/nids-api
+kubectl -n nids rollout history deployment/nids-api
 ```
 
 ### Model rollback
@@ -179,7 +179,7 @@ The artifacts volume is mutable — if a retrain produces a worse model, restore
 
 ```bash
 # Keep a backup before each retrain
-kubectl -n netsentry exec deploy/netsentry-api -- \
+kubectl -n nids exec deploy/nids-api -- \
     tar czf /tmp/models-$(date +%F).tar.gz /app/models_artifacts
 ```
 
@@ -189,9 +189,9 @@ kubectl -n netsentry exec deploy/netsentry-api -- \
 
 Before exposing publicly:
 
-- [ ] Set `NETSENTRY_AUTH__JWT_SECRET` to a random 64-hex secret (never use the default dev secret)
+- [ ] Set `NIDS_AUTH__JWT_SECRET` to a random 64-hex secret (never use the default dev secret)
 - [ ] Change all default user passwords (`admin123`, `operator123`, `viewer123`)
-- [ ] Set `NETSENTRY_API__API_KEY` to a random 64-hex secret
+- [ ] Set `NIDS_API__API_KEY` to a random 64-hex secret
 - [ ] Restrict `api.cors_origins` from `["*"]` to your actual origin(s)
 - [ ] Put the API behind TLS (ingress-nginx + cert-manager, or a CDN/WAF)
 - [ ] Tighten `api.rate_limit_per_minute` for your expected traffic
@@ -212,6 +212,6 @@ Before exposing publicly:
 | All predictions return BENIGN                        | Ensemble weights zeroed or anomaly_boost=1.0| Inspect `config.yaml` — restore defaults              |
 | p95 latency spikes above 20 ms                       | Cold process; first request per worker      | Warm-up hook or prefetch on startup                   |
 | HPA stays at `minReplicas` despite load              | Metrics server not installed                | `kubectl apply -f metrics-server.yaml`                |
-| 429 on every request                                 | Rate limit too tight for real traffic       | Raise `NETSENTRY_API__RATE_LIMIT_PER_MINUTE`          |
+| 429 on every request                                 | Rate limit too tight for real traffic       | Raise `NIDS_API__RATE_LIMIT_PER_MINUTE`          |
 | 401 on all requests after restart                    | JWT secret changed; old tokens are invalid  | Users must re-login; keep secret stable across deploys|
 | Cannot login — default credentials rejected          | Passwords were changed or `users.json` lost | Delete `data/users.json` to re-seed defaults, then change passwords |

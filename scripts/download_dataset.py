@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Download real NIDS datasets for training NetSentry.
+Download real NIDS datasets for training NIDS.
 
 Supports:
   - CIC-IDS2017 improved (RECOMMENDED): the corrected re-extraction by Liu,
@@ -97,7 +97,7 @@ def _download_file(url: str, dest: Path, label: str = "") -> bool:
     dest.parent.mkdir(parents=True, exist_ok=True)
 
     try:
-        req = urllib.request.Request(url, headers={"User-Agent": "NetSentry/1.0"})
+        req = urllib.request.Request(url, headers={"User-Agent": "NIDS/1.0"})
         with urllib.request.urlopen(req, timeout=120) as resp:
             total = int(resp.headers.get("Content-Length", 0))
             downloaded = 0
@@ -241,7 +241,7 @@ def main():
 
     print("\nDone. Next steps:")
     if args.dataset == "cicids2017-improved":
-        print(f"  NETSENTRY_MODEL__RF_N_JOBS=8 python -m scripts.train_real_data --dataset-dir {output} \\")
+        print(f"  NIDS_MODEL__RF_N_JOBS=8 python -m scripts.train_real_data --dataset-dir {output} \\")
         print(f"      --max-per-class 50000 --max-benign 150000 --min-per-class 0")
     elif args.dataset == "cicids2017":
         print(f"  python -m scripts.train_real_data --dataset-dir {output}")

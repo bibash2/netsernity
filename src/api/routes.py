@@ -1,4 +1,4 @@
-"""HTTP route definitions for the NetSentry API.
+"""HTTP route definitions for the NIDS API.
 
 Access control matrix (when auth is enabled):
   Public:                health, ready, metrics
@@ -135,7 +135,7 @@ def build_router(
             raw = engine.predict(req.flow.model_dump())
         except Exception as exc:
             logger.error("request_id=%s inference_error=%s", req_id, exc)
-            REGISTRY.inc_counter("netsentry_http_requests_total", {"route": "predict", "status": "500"})
+            REGISTRY.inc_counter("nids_http_requests_total", {"route": "predict", "status": "500"})
             raise HTTPException(status_code=500, detail=str(exc))
 
         result_dict = raw["results"]
@@ -144,14 +144,14 @@ def build_router(
         _broadcast_flow(result_dict, req.source_ip, alert)
 
         latency_ms = (time.time() - t0) * 1000
-        REGISTRY.observe_histogram("netsentry_prediction_latency_ms", latency_ms, {"route": "predict"})
+        REGISTRY.observe_histogram("nids_prediction_latency_ms", latency_ms, {"route": "predict"})
         REGISTRY.inc_counter(
-            "netsentry_predictions_total",
+            "nids_predictions_total",
             {"result": "attack" if result_dict["is_attack"] else "benign"},
         )
-        REGISTRY.inc_counter("netsentry_http_requests_total", {"route": "predict", "status": "200"})
+        REGISTRY.inc_counter("nids_http_requests_total", {"route": "predict", "status": "200"})
         if alert:
-            REGISTRY.inc_counter("netsentry_alerts_total", {"severity": alert["severity"]})
+            REGISTRY.inc_counter("nids_alerts_total", {"severity": alert["severity"]})
 
         logger.info(
             "request_id=%s prediction=%s is_attack=%s confidence=%.3f latency_ms=%.1f alert=%s",
@@ -178,7 +178,7 @@ def build_router(
             raw = engine.predict([f.model_dump() for f in req.flows])
         except Exception as exc:
             logger.error("request_id=%s batch_error=%s", req_id, exc)
-            REGISTRY.inc_counter("netsentry_http_requests_total", {"route": "batch", "status": "500"})
+            REGISTRY.inc_counter("nids_http_requests_total", {"route": "batch", "status": "500"})
             raise HTTPException(status_code=500, detail=str(exc))
 
         results = raw["results"]
@@ -188,15 +188,15 @@ def build_router(
             _broadcast_flow(r, req.source_ip, alert)
             if alert:
                 alerts_generated += 1
-                REGISTRY.inc_counter("netsentry_alerts_total", {"severity": alert["severity"]})
+                REGISTRY.inc_counter("nids_alerts_total", {"severity": alert["severity"]})
             REGISTRY.inc_counter(
-                "netsentry_predictions_total",
+                "nids_predictions_total",
                 {"result": "attack" if r["is_attack"] else "benign"},
             )
 
         latency_ms = (time.time() - t0) * 1000
-        REGISTRY.observe_histogram("netsentry_prediction_latency_ms", latency_ms / max(1, len(results)), {"route": "batch"})
-        REGISTRY.inc_counter("netsentry_http_requests_total", {"route": "batch", "status": "200"})
+        REGISTRY.observe_histogram("nids_prediction_latency_ms", latency_ms / max(1, len(results)), {"route": "batch"})
+        REGISTRY.inc_counter("nids_http_requests_total", {"route": "batch", "status": "200"})
 
         logger.info(
             "request_id=%s batch_size=%d alerts=%d latency_ms=%.1f",

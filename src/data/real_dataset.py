@@ -23,10 +23,10 @@ from .generator import CLASS_NAMES, CLASS_TO_ID, FEATURE_NAMES, generate_dataset
 logger = get_logger(__name__)
 
 
-# ── Column name mapping: CIC-IDS2017 CSV headers → NetSentry feature names ──
+# ── Column name mapping: CIC-IDS2017 CSV headers → NIDS feature names ──
 
 CIC_IDS2017_COLUMN_MAP: dict[str, str] = {
-    # CIC-IDS2017 header (stripped)       →  NetSentry feature name
+    # CIC-IDS2017 header (stripped)       →  NIDS feature name
     "flow duration":                         "flow_duration",
     "total fwd packets":                     "total_fwd_packets",
     "total backward packets":                "total_bwd_packets",
@@ -103,7 +103,7 @@ CIC_IDS2017_COLUMN_MAP: dict[str, str] = {
 }
 
 
-# ── Label mapping: CIC-IDS2017 fine-grained labels → NetSentry 7 classes ──
+# ── Label mapping: CIC-IDS2017 fine-grained labels → NIDS 7 classes ──
 
 CIC_IDS2017_LABEL_MAP: dict[str, str] = {
     # Benign
@@ -196,7 +196,7 @@ UNSW_NB15_LABEL_MAP: dict[str, str] = {
 
 
 def load_unsw_nb15_csv(csv_path: str | Path) -> tuple[np.ndarray, np.ndarray]:
-    """Load a single UNSW-NB15 CSV file and return (X, y) in NetSentry format."""
+    """Load a single UNSW-NB15 CSV file and return (X, y) in NIDS format."""
     csv_path = Path(csv_path)
     logger.info("Loading UNSW-NB15 CSV: %s", csv_path)
 
@@ -245,20 +245,20 @@ def load_unsw_nb15_csv(csv_path: str | Path) -> tuple[np.ndarray, np.ndarray]:
 
 
 def _build_column_index(header_row: list[str]) -> dict[str, int]:
-    """Map NetSentry feature names to column indices in the CSV header."""
+    """Map NIDS feature names to column indices in the CSV header."""
     # Normalize header: strip whitespace, lowercase
     normalized = {col.strip().lower(): i for i, col in enumerate(header_row)}
 
     feature_to_col: dict[str, int] = {}
-    for cic_name, netsentry_name in CIC_IDS2017_COLUMN_MAP.items():
-        if cic_name in normalized and netsentry_name not in feature_to_col:
-            feature_to_col[netsentry_name] = normalized[cic_name]
+    for cic_name, nids_name in CIC_IDS2017_COLUMN_MAP.items():
+        if cic_name in normalized and nids_name not in feature_to_col:
+            feature_to_col[nids_name] = normalized[cic_name]
 
     return feature_to_col
 
 
 def _parse_label(raw_label: str) -> Optional[str]:
-    """Map a CIC-IDS2017 label string to a NetSentry class name.
+    """Map a CIC-IDS2017 label string to a NIDS class name.
 
     Returns None (row dropped) for unknown labels and for the corrected
     dataset's "<attack> - Attempted" flows: attack traffic that never exhibited
@@ -288,7 +288,7 @@ def _safe_float(value: str) -> float:
 
 
 def load_cic_ids2017_csv(csv_path: str | Path) -> tuple[np.ndarray, np.ndarray]:
-    """Load a single CIC-IDS2017 CSV file and return (X, y) in NetSentry format.
+    """Load a single CIC-IDS2017 CSV file and return (X, y) in NIDS format.
 
     Handles column name mapping, label mapping, bad values, and missing features.
     Rows with unmappable labels are silently dropped.
@@ -327,13 +327,13 @@ def load_cic_ids2017_csv(csv_path: str | Path) -> tuple[np.ndarray, np.ndarray]:
                 continue
 
             # Map label
-            netsentry_label = _parse_label(row[label_col])
-            if netsentry_label is None:
+            nids_label = _parse_label(row[label_col])
+            if nids_label is None:
                 raw = row[label_col].strip().lower()
                 skipped_labels[raw] = skipped_labels.get(raw, 0) + 1
                 continue
 
-            # Extract features in NetSentry order
+            # Extract features in NIDS order
             features = []
             for feat_name in FEATURE_NAMES:
                 col_idx = feature_to_col.get(feat_name)
@@ -343,7 +343,7 @@ def load_cic_ids2017_csv(csv_path: str | Path) -> tuple[np.ndarray, np.ndarray]:
                     features.append(0.0)
 
             X_rows.append(features)
-            y_labels.append(CLASS_TO_ID[netsentry_label])
+            y_labels.append(CLASS_TO_ID[nids_label])
 
     if skipped_labels:
         logger.warning("Skipped unmapped labels: %s", skipped_labels)

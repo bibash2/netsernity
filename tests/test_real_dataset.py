@@ -32,13 +32,13 @@ from src.data.real_dataset import (
 
 # Build a CIC-IDS2017-style header from our column map (reverse mapping)
 CIC_HEADER = []
-_NETSENTRY_TO_CIC: dict[str, str] = {}
+_NIDS_TO_CIC: dict[str, str] = {}
 for cic_name, ns_name in CIC_IDS2017_COLUMN_MAP.items():
-    if ns_name not in _NETSENTRY_TO_CIC:
-        _NETSENTRY_TO_CIC[ns_name] = cic_name
+    if ns_name not in _NIDS_TO_CIC:
+        _NIDS_TO_CIC[ns_name] = cic_name
 
 # Build header in a predictable order
-CIC_HEADER = [_NETSENTRY_TO_CIC.get(f, f) for f in FEATURE_NAMES] + [" Label"]
+CIC_HEADER = [_NIDS_TO_CIC.get(f, f) for f in FEATURE_NAMES] + [" Label"]
 
 
 def _write_cic_csv(path: Path, rows: list[tuple[list[float], str]]) -> None:
@@ -46,7 +46,7 @@ def _write_cic_csv(path: Path, rows: list[tuple[list[float], str]]) -> None:
     # Use title-case header names like the real CIC-IDS2017 CSVs
     header = []
     for f in FEATURE_NAMES:
-        cic_name = _NETSENTRY_TO_CIC.get(f, f)
+        cic_name = _NIDS_TO_CIC.get(f, f)
         # Title-case to match real CSVs
         header.append(" " + cic_name.title())
     header.append(" Label")

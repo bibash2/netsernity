@@ -1,4 +1,4 @@
-# NetSentry — development command shortcuts.
+# NIDS — development command shortcuts.
 # Use `make help` to see everything.
 
 .DEFAULT_GOAL := help
@@ -12,7 +12,7 @@ PORT    ?= 8000
 JOBS    ?= 8
 
 help:                                   ## Show this help
-	@awk 'BEGIN {FS = ":.*##"; printf "\n\033[1mNetSentry — Makefile targets\033[0m\n\n"} \
+	@awk 'BEGIN {FS = ":.*##"; printf "\n\033[1mNIDS — Makefile targets\033[0m\n\n"} \
 	/^[a-zA-Z_-]+:.*?##/ { printf "  \033[36m%-22s\033[0m %s\n", $$1, $$2 }' $(MAKEFILE_LIST)
 
 # ─── Environment ─────────────────────────────────────
@@ -52,7 +52,7 @@ download-data:                          ## Download the corrected CIC-IDS2017 (3
 	$(PYTHON) -m scripts.download_dataset --dataset cicids2017-improved
 
 train-real: download-data               ## Train on real corrected CIC-IDS2017 flows (no synthetic padding)
-	NETSENTRY_MODEL__RF_N_JOBS=$(JOBS) $(PYTHON) -m scripts.train_real_data \
+	NIDS_MODEL__RF_N_JOBS=$(JOBS) $(PYTHON) -m scripts.train_real_data \
 		--dataset-dir data/cic-ids2017-improved --max-per-class 50000 --max-benign 150000 --min-per-class 0
 
 docs:                                   ## Regenerate report figures and rebuild the Word documents from Markdown (needs pandoc)
@@ -70,7 +70,7 @@ predict:                                ## Predict on a CSV (override: make pred
 
 # ─── Docker ──────────────────────────────────────────
 docker-build:                           ## Build the API container image
-	docker build -t netsentry:latest -f docker/Dockerfile .
+	docker build -t nids:latest -f docker/Dockerfile .
 
 docker-up:                              ## Start the full stack (API, trainer, nginx, prom, grafana)
 	cd docker && docker compose up -d --build
@@ -87,8 +87,8 @@ k8s-apply:                              ## Apply all manifests to the current cl
 	kubectl apply -f deployment/kubernetes/training-job.yaml
 	kubectl apply -f deployment/kubernetes/deployment.yaml
 
-k8s-delete:                             ## Tear down the NetSentry namespace and everything in it
-	kubectl delete namespace netsentry --ignore-not-found
+k8s-delete:                             ## Tear down the NIDS namespace and everything in it
+	kubectl delete namespace nids --ignore-not-found
 
 # ─── One-shot demo ──────────────────────────────────
 demo: install train serve               ## Install deps, train on 20k flows, then serve the API

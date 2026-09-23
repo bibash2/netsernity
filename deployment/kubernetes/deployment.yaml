@@ -1,4 +1,4 @@
-# NetSentry Kubernetes deployment.
+# NIDS Kubernetes deployment.
 #
 # Apply order:
 #   kubectl apply -f namespace.yaml
@@ -17,10 +17,10 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: netsentry-api
-  namespace: netsentry
+  name: nids-api
+  namespace: nids
   labels:
-    app: netsentry
+    app: nids
     component: api
 spec:
   replicas: 2
@@ -31,12 +31,12 @@ spec:
       maxUnavailable: 0
   selector:
     matchLabels:
-      app: netsentry
+      app: nids
       component: api
   template:
     metadata:
       labels:
-        app: netsentry
+        app: nids
         component: api
       annotations:
         prometheus.io/scrape: "true"
@@ -50,22 +50,22 @@ spec:
         fsGroup: 1000
       containers:
         - name: api
-          image: netsentry:1.0.0
+          image: nids:1.0.0
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
               containerPort: 8000
           env:
-            - name: NETSENTRY_API__HOST
+            - name: NIDS_API__HOST
               value: "0.0.0.0"
-            - name: NETSENTRY_API__PORT
+            - name: NIDS_API__PORT
               value: "8000"
-            - name: NETSENTRY_LOGGING__LEVEL
+            - name: NIDS_LOGGING__LEVEL
               value: "INFO"
-            - name: NETSENTRY_API__API_KEY
+            - name: NIDS_API__API_KEY
               valueFrom:
                 secretKeyRef:
-                  name: netsentry-secret
+                  name: nids-secret
                   key: api-key
                   optional: true
           resources:
@@ -111,22 +111,22 @@ spec:
       volumes:
         - name: models
           persistentVolumeClaim:
-            claimName: netsentry-models
+            claimName: nids-models
         - name: logs
           emptyDir: {}
 ---
 apiVersion: v1
 kind: Service
 metadata:
-  name: netsentry-api
-  namespace: netsentry
+  name: nids-api
+  namespace: nids
   labels:
-    app: netsentry
+    app: nids
     component: api
 spec:
   type: ClusterIP
   selector:
-    app: netsentry
+    app: nids
     component: api
   ports:
     - name: http
@@ -137,13 +137,13 @@ spec:
 apiVersion: autoscaling/v2
 kind: HorizontalPodAutoscaler
 metadata:
-  name: netsentry-api
-  namespace: netsentry
+  name: nids-api
+  namespace: nids
 spec:
   scaleTargetRef:
     apiVersion: apps/v1
     kind: Deployment
-    name: netsentry-api
+    name: nids-api
   minReplicas: 2
   maxReplicas: 10
   metrics:
@@ -176,11 +176,11 @@ spec:
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
-  name: netsentry-api
-  namespace: netsentry
+  name: nids-api
+  namespace: nids
 spec:
   minAvailable: 1
   selector:
     matchLabels:
-      app: netsentry
+      app: nids
       component: api

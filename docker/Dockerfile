@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1.6
-# Multi-stage build for NetSentry.
+# Multi-stage build for NIDS.
 # Stage 1: build a slim venv with only the runtime deps.
 # Stage 2: copy the venv + source into a minimal final image.
 
@@ -39,23 +39,23 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONPATH=/app
 
 # Run as non-root for basic container hardening
-RUN groupadd --system --gid 1000 netsentry \
-    && useradd --system --uid 1000 --gid netsentry --create-home --shell /bin/bash netsentry
+RUN groupadd --system --gid 1000 nids \
+    && useradd --system --uid 1000 --gid nids --create-home --shell /bin/bash nids
 
 WORKDIR /app
 
 # Copy venv and source
 COPY --from=builder /opt/venv /opt/venv
-COPY --chown=netsentry:netsentry src /app/src
-COPY --chown=netsentry:netsentry scripts /app/scripts
-COPY --chown=netsentry:netsentry config /app/config
-COPY --chown=netsentry:netsentry setup.py requirements.txt /app/
+COPY --chown=nids:nids src /app/src
+COPY --chown=nids:nids scripts /app/scripts
+COPY --chown=nids:nids config /app/config
+COPY --chown=nids:nids setup.py requirements.txt /app/
 
 # Directories the runtime will write to
 RUN mkdir -p /app/data /app/models_artifacts /app/logs \
-    && chown -R netsentry:netsentry /app
+    && chown -R nids:nids /app
 
-USER netsentry
+USER nids
 
 EXPOSE 8000
 

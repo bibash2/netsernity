@@ -33,7 +33,7 @@ from src.enforcement.executor import ResponseExecutor
 
 # ── Helpers ───────────────────────────────────────────────────────────────
 
-_DATASET_PATH = ROOT / "data" / "netsentry_dataset.csv"
+_DATASET_PATH = ROOT / "data" / "nids_dataset.csv"
 _REAL_X, _REAL_Y = None, None
 
 

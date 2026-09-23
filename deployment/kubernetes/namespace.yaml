@@ -2,16 +2,16 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: netsentry
+  name: nids
   labels:
-    app: netsentry
+    app: nids
 ---
 # Application config (non-secret)
 apiVersion: v1
 kind: ConfigMap
 metadata:
-  name: netsentry-config
-  namespace: netsentry
+  name: nids-config
+  namespace: nids
 data:
   config.yaml: |
     data:
@@ -19,7 +19,7 @@ data:
       test_size: 0.20
       val_size: 0.10
       random_state: 42
-      dataset_path: /app/data/netsentry_dataset.csv
+      dataset_path: /app/data/nids_dataset.csv
 
     model:
       rf_n_estimators: 100
@@ -43,14 +43,14 @@ data:
     logging:
       level: INFO
       format: json
-      file: /app/logs/netsentry.log
+      file: /app/logs/nids.log
 ---
 # Persistent volumes for trained artifacts and dataset
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: netsentry-models
-  namespace: netsentry
+  name: nids-models
+  namespace: nids
 spec:
   accessModes: ["ReadWriteMany"]
   resources:
@@ -60,8 +60,8 @@ spec:
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
-  name: netsentry-data
-  namespace: netsentry
+  name: nids-data
+  namespace: nids
 spec:
   accessModes: ["ReadWriteOnce"]
   resources:

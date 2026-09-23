@@ -35,7 +35,7 @@ from src.enforcement.policy import RESPONSE_POLICY, ActionType
 # ── Helpers ───────────────────────────────────────────────────────────────
 
 # Load real dataset once for the module
-_DATASET_PATH = ROOT / "data" / "netsentry_dataset.csv"
+_DATASET_PATH = ROOT / "data" / "nids_dataset.csv"
 _REAL_X, _REAL_Y = None, None
 
 

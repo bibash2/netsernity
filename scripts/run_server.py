@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-NetSentry — API server entry point.
+NIDS — API server entry point.
 
 Starts uvicorn serving the FastAPI app. Expects trained models at
 config.paths.models_dir. Run the training pipeline first.
@@ -27,7 +27,7 @@ from src.utils.logger import configure_logging, get_logger
 
 
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="NetSentry API server")
+    p = argparse.ArgumentParser(description="NIDS API server")
     p.add_argument("--config", default="config/config.yaml")
     p.add_argument("--host", default=None)
     p.add_argument("--port", type=int, default=None)
@@ -46,7 +46,7 @@ def main() -> int:
     workers = args.workers or cfg.api.workers
 
     configure_logging(level=cfg.logging.level, file_path=cfg.logging.file, json_format=True)
-    log = get_logger("netsentry.server")
+    log = get_logger("nids.server")
     log.info("Starting API on %s:%d (workers=%d, reload=%s)", host, port, workers, args.reload)
 
     app = create_app(cfg)

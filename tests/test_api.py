@@ -76,7 +76,7 @@ def test_health(client: TestClient) -> None:
 def test_metrics_endpoint(client: TestClient) -> None:
     r = client.get("/api/v1/metrics")
     assert r.status_code == 200
-    assert "netsentry_up" in r.text
+    assert "nids_up" in r.text
 
 
 def test_predict_benign(client: TestClient) -> None:

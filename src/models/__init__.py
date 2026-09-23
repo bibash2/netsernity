@@ -1,4 +1,4 @@
-"""From-scratch ML models for NetSentry NIDS."""
+"""From-scratch ML models for NIDS."""
 
 from .base import BaseModel
 from .decision_tree import DecisionTreeClassifier, TreeNode

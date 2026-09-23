@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-NetSentry — CLI predictor.
+NIDS — CLI predictor.
 
 Read flows from a CSV (same schema as the training dataset) and print
 predictions. Useful for quick offline scoring without running the API.
@@ -28,7 +28,7 @@ from src.utils.config import load_config
 
 
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="NetSentry offline predictor")
+    p = argparse.ArgumentParser(description="NIDS offline predictor")
     p.add_argument("--config", default="config/config.yaml")
     p.add_argument("--input", required=True, help="Input CSV with flow features")
     p.add_argument("--output", default=None, help="Write predictions to CSV instead of stdout")

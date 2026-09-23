@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-NetSentry — Live network traffic capture and real-time intrusion detection.
+NIDS — Live network traffic capture and real-time intrusion detection.
 
 Sniffs packets on a network interface, aggregates them into flows by 5-tuple
 (src_ip, dst_ip, src_port, dst_port, protocol), extracts CIC-IDS-style features,
-and POSTs each completed flow to the NetSentry API for classification.
+and POSTs each completed flow to the NIDS API for classification.
 
 When an intrusion is detected with sufficient confidence, the API's enforcement
 engine automatically blocks the source IP.
@@ -51,7 +51,7 @@ import urllib.error
 
 
 class ApiClient:
-    """Thin NetSentry API client: logs in for a JWT, attaches it to every
+    """Thin NIDS API client: logs in for a JWT, attaches it to every
     request, re-logs in on 401, and backs off on 429 (rate limit)."""
 
     def __init__(self, api_url: str, username: str, password: str,
@@ -194,7 +194,7 @@ class FlowTable:
 
 
 def send_flow_to_api(client: ApiClient, flow: FlowAccumulator, verbose: bool = False) -> Optional[dict]:
-    """POST a flow to the NetSentry predict API. Returns response dict or None."""
+    """POST a flow to the NIDS predict API. Returns response dict or None."""
     body = client.predict(flow.to_features(), flow.src_ip)
     if body is None:
         return None
@@ -252,13 +252,13 @@ def flush_loop(flow_table: FlowTable, client: ApiClient, interval: float,
 
 
 def parse_args():
-    p = argparse.ArgumentParser(description="NetSentry live traffic capture")
+    p = argparse.ArgumentParser(description="NIDS live traffic capture")
     p.add_argument("--iface", default=None,
                    help="Network interface (default: scapy default)")
     p.add_argument("--pcap", default=None,
                    help="Read from pcap file instead of live capture (no sudo needed)")
     p.add_argument("--api", default="http://localhost:8000/api/v1",
-                   help="NetSentry API base URL")
+                   help="NIDS API base URL")
     p.add_argument("--username", default="admin", help="API login username")
     p.add_argument("--password", default="admin123", help="API login password")
     p.add_argument("--token", default=None,
@@ -286,7 +286,7 @@ def main():
     args = parse_args()
 
     print("=" * 70)
-    print("  NetSentry — Live Traffic Capture & Real-Time Intrusion Detection")
+    print("  NIDS — Live Traffic Capture & Real-Time Intrusion Detection")
     print("=" * 70)
     print(f"  Interface:      {args.iface or 'default'}")
     print(f"  API endpoint:   {args.api}")
@@ -391,7 +391,7 @@ def _run_simulation(args):
     from src.data import FEATURE_NAMES, CLASS_NAMES, CLASS_TO_ID
     from src.data.generator import load_dataset_csv
 
-    dataset_path = Path("data/netsentry_dataset.csv")
+    dataset_path = Path("data/nids_dataset.csv")
     if not dataset_path.exists():
         print(f"\033[91mERROR: Dataset not found at {dataset_path}\033[0m")
         print("Run training first: python3 -m scripts.train_real_data --dataset-dir data/cic-ids2017/")

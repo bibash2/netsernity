@@ -1,4 +1,4 @@
-"""User and role models for NetSentry access control."""
+"""User and role models for NIDS access control."""
 
 from __future__ import annotations
 

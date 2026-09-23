@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Evaluate a trained NetSentry model against real or synthetic traffic.
+Evaluate a trained NIDS model against real or synthetic traffic.
 
 Reports: FPR, FNR, Detection Rate, per-class metrics, confusion matrix.
 Optionally runs against a pcap file to test with actual network traffic.
@@ -213,7 +213,7 @@ def evaluate_pcap(ensemble, preprocessor, pcap_path: str, min_packets: int = 2):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Evaluate NetSentry model")
+    parser = argparse.ArgumentParser(description="Evaluate NIDS model")
     parser.add_argument("--models-dir", default="models_artifacts", help="Models directory")
     parser.add_argument("--dataset-dir", default=None, help="CIC-IDS2017 directory for evaluation")
     parser.add_argument("--dataset-csv", default=None, help="Single CSV file for evaluation")
@@ -223,7 +223,7 @@ def main():
     args = parser.parse_args()
 
     print("=" * 70)
-    print("NetSentry — Model Evaluation")
+    print("NIDS — Model Evaluation")
     print("=" * 70)
 
     ensemble, preprocessor = load_model_and_preprocessor(args.models_dir)
@@ -242,7 +242,7 @@ def main():
         X, y = load_dataset_csv(args.dataset_csv)
     else:
         # Default: use training dataset
-        default_path = Path("data/netsentry_dataset.csv")
+        default_path = Path("data/nids_dataset.csv")
         if not default_path.exists():
             print("No dataset found. Provide --dataset-dir, --dataset-csv, or --pcap")
             sys.exit(1)

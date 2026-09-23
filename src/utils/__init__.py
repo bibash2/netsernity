@@ -1,4 +1,4 @@
-"""Utilities for NetSentry."""
+"""Utilities for NIDS."""
 
 from .config import Config, load_config, ensure_directories
 from .logger import configure_logging, get_logger, new_request_id

@@ -13,21 +13,21 @@ services:
     build:
       context: ..
       dockerfile: docker/Dockerfile
-    image: netsentry:latest
-    container_name: netsentry-api
+    image: nids:latest
+    container_name: nids-api
     restart: unless-stopped
     environment:
-      NETSENTRY_API__HOST: 0.0.0.0
-      NETSENTRY_API__PORT: "8000"
-      NETSENTRY_LOGGING__LEVEL: INFO
-      NETSENTRY_API__API_KEY: ${NETSENTRY_API_KEY:-}
+      NIDS_API__HOST: 0.0.0.0
+      NIDS_API__PORT: "8000"
+      NIDS_LOGGING__LEVEL: INFO
+      NIDS_API__API_KEY: ${NIDS_API_KEY:-}
     volumes:
       - models:/app/models_artifacts
       - logs:/app/logs
       - data:/app/data
     ports:
       - "8000:8000"
-    networks: [netsentry]
+    networks: [nids]
     depends_on:
       trainer:
         condition: service_completed_successfully
@@ -35,24 +35,24 @@ services:
   # One-shot training container. `condition: service_completed_successfully`
   # above ensures the API only starts after models have been trained.
   trainer:
-    image: netsentry:latest
+    image: nids:latest
     build:
       context: ..
       dockerfile: docker/Dockerfile
-    container_name: netsentry-trainer
+    container_name: nids-trainer
     command: ["python", "-m", "scripts.train_pipeline", "--config", "config/config.yaml", "--quiet"]
     environment:
-      NETSENTRY_DATA__N_SAMPLES: "${N_SAMPLES:-20000}"
+      NIDS_DATA__N_SAMPLES: "${N_SAMPLES:-20000}"
     volumes:
       - models:/app/models_artifacts
       - data:/app/data
       - logs:/app/logs
-    networks: [netsentry]
+    networks: [nids]
 
   # ────────────────────────────────────────────────
   nginx:
     image: nginx:1.27-alpine
-    container_name: netsentry-nginx
+    container_name: nids-nginx
     restart: unless-stopped
     ports:
       - "80:80"
@@ -60,12 +60,12 @@ services:
       - ../deployment/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
       - api
-    networks: [netsentry]
+    networks: [nids]
 
   # ────────────────────────────────────────────────
   prometheus:
     image: prom/prometheus:v2.54.1
-    container_name: netsentry-prometheus
+    container_name: nids-prometheus
     restart: unless-stopped
     command:
       - "--config.file=/etc/prometheus/prometheus.yml"
@@ -76,13 +76,13 @@ services:
       - prom_data:/prometheus
     ports:
       - "9090:9090"
-    networks: [netsentry]
+    networks: [nids]
     depends_on:
       - api
 
   grafana:
     image: grafana/grafana:11.2.0
-    container_name: netsentry-grafana
+    container_name: nids-grafana
     restart: unless-stopped
     environment:
       GF_SECURITY_ADMIN_USER: admin
@@ -92,7 +92,7 @@ services:
       - "3000:3000"
     volumes:
       - grafana_data:/var/lib/grafana
-    networks: [netsentry]
+    networks: [nids]
     depends_on:
       - prometheus
 
@@ -104,5 +104,5 @@ volumes:
   grafana_data:
 
 networks:
-  netsentry:
+  nids:
     driver: bridge

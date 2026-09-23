@@ -1,4 +1,4 @@
-"""Pydantic schemas for the NetSentry REST API."""
+"""Pydantic schemas for the NIDS REST API."""
 
 from __future__ import annotations
 

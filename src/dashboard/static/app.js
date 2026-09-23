@@ -1,14 +1,14 @@
-/* NetSentry Dashboard — user-friendly real-time monitoring */
+/* NIDS Dashboard — user-friendly real-time monitoring */
 
 const API = "/api/v1";
 const POLL_MS = 2000;
 
 // ── Auth ──
-const TOKEN_KEY = "netsentry_token";
+const TOKEN_KEY = "nids_token";
 const nsToken = localStorage.getItem(TOKEN_KEY);
-const nsRole = localStorage.getItem("netsentry_role") || "viewer";
-const nsUsername = localStorage.getItem("netsentry_username") || "";
-const nsName = localStorage.getItem("netsentry_name") || nsUsername;
+const nsRole = localStorage.getItem("nids_role") || "viewer";
+const nsUsername = localStorage.getItem("nids_username") || "";
+const nsName = localStorage.getItem("nids_name") || nsUsername;
 
 if (!nsToken) {
   window.location.href = "/login";
@@ -27,9 +27,9 @@ roleBadge.classList.add("role-" + nsRole);
 // Logout
 document.getElementById("logout-btn").addEventListener("click", function () {
   localStorage.removeItem(TOKEN_KEY);
-  localStorage.removeItem("netsentry_role");
-  localStorage.removeItem("netsentry_name");
-  localStorage.removeItem("netsentry_username");
+  localStorage.removeItem("nids_role");
+  localStorage.removeItem("nids_name");
+  localStorage.removeItem("nids_username");
   window.location.href = "/login";
 });
 
@@ -147,9 +147,9 @@ function fmtTime(iso) {
 function handleAuthError(r) {
   if (r.status === 401) {
     localStorage.removeItem(TOKEN_KEY);
-    localStorage.removeItem("netsentry_role");
-    localStorage.removeItem("netsentry_name");
-    localStorage.removeItem("netsentry_username");
+    localStorage.removeItem("nids_role");
+    localStorage.removeItem("nids_name");
+    localStorage.removeItem("nids_username");
     window.location.href = "/login";
     throw new Error("Session expired");
   }

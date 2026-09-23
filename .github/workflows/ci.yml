@@ -87,11 +87,11 @@ jobs:
           context: .
           file: docker/Dockerfile
           push: false
-          tags: netsentry:${{ github.sha }}
+          tags: nids:${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Smoke-test built image
         run: |
-          docker run --rm netsentry:${{ github.sha }} \
+          docker run --rm nids:${{ github.sha }} \
               python -c "import src.models; import src.api; print('ok')"

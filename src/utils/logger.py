@@ -1,5 +1,5 @@
 """
-Structured logging for NetSentry.
+Structured logging for NIDS.
 
 Produces JSON-formatted log lines that play well with Grafana Loki, ELK, CloudWatch,
 or any log aggregator. Falls back to a readable console format when a TTY is attached.

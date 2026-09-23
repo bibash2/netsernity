@@ -341,4 +341,4 @@ class TestPublicEndpoints:
     def test_login_page_served(self, auth_client):
         r = auth_client.get("/login")
         assert r.status_code == 200
-        assert "NetSentry" in r.text
+        assert "NIDS" in r.text

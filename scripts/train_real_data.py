@@ -1,5 +1,5 @@
 """
-Train NetSentry on real CIC-IDS2017 / CIC-IDS2018 datasets.
+Train NIDS on real CIC-IDS2017 / CIC-IDS2018 datasets.
 
 Usage:
     # Train on downloaded CIC-IDS2017 CSVs
@@ -33,7 +33,7 @@ logger = get_logger(__name__)
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Train NetSentry on real CIC-IDS2017 data")
+    parser = argparse.ArgumentParser(description="Train NIDS on real CIC-IDS2017 data")
     parser.add_argument(
         "--dataset-dir", required=True, type=str,
         help="Directory containing CIC-IDS2017 CSV files",
@@ -59,7 +59,7 @@ def main() -> None:
     ensure_directories(cfg)
 
     print("=" * 70)
-    print("NetSentry — Training on Real Dataset")
+    print("NIDS — Training on Real Dataset")
     print(f"Dataset dir:    {args.dataset_dir}")
     print(f"Max per class:  {args.max_per_class:,}")
     print(f"Min per class:  {args.min_per_class:,}")

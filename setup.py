@@ -1,4 +1,4 @@
-"""Package definition for NetSentry."""
+"""Package definition for NIDS."""
 
 from setuptools import find_packages, setup
 
@@ -9,21 +9,21 @@ with open("requirements.txt", "r") as f:
     ]
 
 setup(
-    name="netsentry",
+    name="nids",
     version="1.0.0",
     description="Production-grade Network Intrusion Detection System with from-scratch ML",
     long_description=open("README.md").read() if __import__("os").path.exists("README.md") else "",
     long_description_content_type="text/markdown",
-    author="NetSentry Project",
+    author="NIDS Project",
     license="MIT",
     python_requires=">=3.10",
     packages=find_packages(include=["src", "src.*"]),
     install_requires=requirements,
     entry_points={
         "console_scripts": [
-            "netsentry-train=scripts.train_pipeline:main",
-            "netsentry-serve=scripts.run_server:main",
-            "netsentry-predict=scripts.predict:main",
+            "nids-train=scripts.train_pipeline:main",
+            "nids-serve=scripts.run_server:main",
+            "nids-predict=scripts.predict:main",
         ],
     },
     classifiers=[

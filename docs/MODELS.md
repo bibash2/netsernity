@@ -1,4 +1,4 @@
-# NetSentry — From-Scratch Models
+# NIDS — From-Scratch Models
 
 Implementation notes for every ML component. The goal is that a reader can open any file in `src/models/` and follow the algorithm from the mathematics down to the NumPy line.
 
@@ -193,7 +193,7 @@ Default weights 0.55 / 0.45 favor the Random Forest (which on tabular features c
 
 ### Rule 2 — Anomaly override
 
-If the supervised vote says "benign" *and* the IF anomaly score exceeds `anomaly_boost` (default 0.75), re-route the prediction to the highest-probability attack class. This is how NetSentry surfaces zero-day traffic that doesn't match any labelled attack profile yet.
+If the supervised vote says "benign" *and* the IF anomaly score exceeds `anomaly_boost` (default 0.75), re-route the prediction to the highest-probability attack class. This is how NIDS surfaces zero-day traffic that doesn't match any labelled attack profile yet.
 
 ### Auditability
 
@@ -255,7 +255,7 @@ CSE-CIC-IDS-2018"* (Liu, Engelen, Lynar, Essam, Joosen — IEEE CNS 2022). Compa
 original CSVs it fixes CICFlowMeter bugs (TCP termination, flag counting, duplicated flows) and
 relabels traffic (e.g. the previously unlabelled port scan launched from the infiltrated host).
 
-`src/data/real_dataset.py` maps its CICFlowMeter-v4 column names onto the 30 NetSentry features
+`src/data/real_dataset.py` maps its CICFlowMeter-v4 column names onto the 30 NIDS features
 and applies three rules:
 
 | Rule | Why |

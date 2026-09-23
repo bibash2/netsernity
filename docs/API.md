@@ -1,4 +1,4 @@
-# NetSentry — API Reference
+# NIDS — API Reference
 
 Base URL: `http://<host>:<port>/api/v1`
 
@@ -131,14 +131,14 @@ Readiness check. Returns 200 once the ensemble is loaded, otherwise 503. Use thi
 Prometheus text exposition. Scrape with the default Prometheus agent — no content-type negotiation needed.
 
 ```
-# TYPE netsentry_up gauge
-netsentry_up 1
-# TYPE netsentry_predictions_total counter
-netsentry_predictions_total{result="benign"} 143
-netsentry_predictions_total{result="attack"} 27
-# TYPE netsentry_prediction_latency_ms histogram
-netsentry_prediction_latency_ms_bucket{route="predict",le="1"} 55
-netsentry_prediction_latency_ms_bucket{route="predict",le="5"} 170
+# TYPE nids_up gauge
+nids_up 1
+# TYPE nids_predictions_total counter
+nids_predictions_total{result="benign"} 143
+nids_predictions_total{result="attack"} 27
+# TYPE nids_prediction_latency_ms histogram
+nids_prediction_latency_ms_bucket{route="predict",le="1"} 55
+nids_prediction_latency_ms_bucket{route="predict",le="5"} 170
 ...
 ```
 

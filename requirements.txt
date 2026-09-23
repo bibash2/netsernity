@@ -1,4 +1,4 @@
-# NetSentry runtime dependencies.
+# NIDS runtime dependencies.
 #
 # Intentionally minimal: ML models are implemented from scratch with NumPy,
 # so we avoid sklearn / xgboost / torch in the production image. The rest

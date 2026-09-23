@@ -26,7 +26,7 @@ from .random_forest import RandomForestClassifier
 
 
 class EnsembleNIDS(BaseModel):
-    """Production detection head for NetSentry.
+    """Production detection head for NIDS.
 
     Parameters
     ----------

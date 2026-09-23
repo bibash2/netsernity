@@ -1,5 +1,5 @@
 """
-NetSentry FastAPI application factory.
+NIDS FastAPI application factory.
 
 Call `create_app(config)` to obtain a fully-wired ASGI app with:
     - Trained-model loading at startup
@@ -48,14 +48,14 @@ def create_app(config: Config) -> FastAPI:
     async def lifespan(app: FastAPI):
         nonlocal _event_loop
         _event_loop = asyncio.get_running_loop()
-        REGISTRY.set_gauge("netsentry_up", 1)
-        logger.info("NetSentry API started, version=%s models=%s", VERSION, config.paths.models_dir)
+        REGISTRY.set_gauge("nids_up", 1)
+        logger.info("NIDS API started, version=%s models=%s", VERSION, config.paths.models_dir)
         yield
-        REGISTRY.set_gauge("netsentry_up", 0)
-        logger.info("NetSentry API shutting down")
+        REGISTRY.set_gauge("nids_up", 0)
+        logger.info("NIDS API shutting down")
 
     app = FastAPI(
-        title="NetSentry — Network Intrusion Detection System",
+        title="NIDS — Network Intrusion Detection System",
         description="From-scratch ML-based NIDS with real-time inference, alerting, and monitoring.",
         version=VERSION,
         docs_url="/docs",
@@ -220,7 +220,7 @@ def create_app(config: Config) -> FastAPI:
         index = dashboard_dir / "index.html"
         if index.exists():
             return FileResponse(index)
-        return JSONResponse({"message": "NetSentry is running", "docs": "/docs"})
+        return JSONResponse({"message": "NIDS is running", "docs": "/docs"})
 
     @app.get("/login", include_in_schema=False)
     def login_page() -> FileResponse:
